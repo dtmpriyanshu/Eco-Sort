@@ -1,0 +1,6 @@
+# ExecuTorch Lowered Model Artifact for Arm SoC
+Model: meta-llama/Llama-3.2-1B-Instruct
+Target: Arm Cortex-A (ARMv8.2+ / ARMv9)
+Backend: XNNPACK + Arm KleidiAI
+Quantization: INT4 Groupwise 128
+Export Timestamp: 2026-11-20T17:40:04Z

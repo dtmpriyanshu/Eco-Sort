@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.env
+.venv/
+env/
+venv/
+ENV/
+
+# Android build outputs & Gradle cache
+android/.gradle/
+android/build/
+android/app/build/
+android/.idea/
+android/*.iml
+android/local.properties
+.gradle/
+build/
+*.hprof
+
+# OS specific
+.DS_Store
+Thumbs.db
+android_screen.png

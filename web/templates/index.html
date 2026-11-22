@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EcoSort-Arm • Smart Multimodal Waste Segregation</title>
+  <!-- Tailwind CSS & Lucide Icons -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+          },
+          colors: {
+            espresso: '#181411',
+            espressoDark: '#120F0D',
+            caramel: '#C67C4E',
+            caramelHover: '#B26B3E',
+            creamBg: '#F9F8F6',
+            cardBg: '#FFFFFF',
+            mutedGray: '#8E8A86',
+            borderSubtle: '#EBE7E1',
+            sbmBlue: '#2563EB',
+            sbmGreen: '#16A34A',
+            sbmRed: '#DC2626'
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { background-color: #F9F8F6; font-family: 'Plus Jakarta Sans', sans-serif; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  </style>
+</head>
+<body class="text-slate-800 antialiased min-h-screen flex flex-col justify-between">
+
+  <!-- TOP HEADER (Deep Espresso Theme) -->
+  <header class="bg-espresso text-white pt-8 pb-10 px-4 sm:px-6 shadow-md relative overflow-hidden">
+    <div class="max-w-2xl mx-auto">
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold uppercase tracking-wider text-caramel bg-caramel/15 px-2.5 py-0.5 rounded-full">Bharat AI-SoC • PS2</span>
+            <span class="text-xs font-semibold text-zinc-400">Arm Cortex-A</span>
+          </div>
+          <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight mt-1 text-white">EcoSort<span class="text-caramel">-Arm</span></h1>
+          <p class="text-xs sm:text-sm text-zinc-400 font-medium">Smart Waste Segregation & Environmental Guide</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="resetApp()" class="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-zinc-300 transition-colors" title="Reset">
+            <i data-lucide="rotate-ccw" class="w-5 h-5"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- SEARCH & INPUT BAR -->
+      <div class="relative mt-4">
+        <div class="bg-cardBg rounded-2xl shadow-lg p-2 flex items-center gap-1.5 sm:gap-2 border border-borderSubtle">
+          <div class="pl-2 text-mutedGray">
+            <i data-lucide="search" class="w-5 h-5"></i>
+          </div>
+          <input 
+            id="queryInput"
+            type="text" 
+            placeholder="Type waste item (e.g., mouse, wrapper, umbrella)..." 
+            class="w-full bg-transparent text-sm sm:text-base text-slate-900 placeholder-mutedGray focus:outline-none px-2 font-medium"
+            onkeydown="if(event.key === 'Enter') handleSearch()"
+          />
+          <!-- Voice Button -->
+          <button id="micBtn" onclick="toggleVoice()" class="w-9 h-9 rounded-xl flex items-center justify-center text-caramel hover:bg-caramel/10 transition-colors shrink-0" title="Speak item">
+            <i data-lucide="mic" class="w-5 h-5"></i>
+          </button>
+          <!-- Live Webcam Button -->
+          <button type="button" onclick="openWebcam()" class="w-9 h-9 rounded-xl flex items-center justify-center text-mutedGray hover:text-caramel hover:bg-caramel/10 transition-colors shrink-0" title="Open Live Webcam">
+            <i data-lucide="camera" class="w-5 h-5"></i>
+          </button>
+          <!-- Upload Photo Button -->
+          <label class="w-9 h-9 rounded-xl flex items-center justify-center text-mutedGray hover:text-caramel hover:bg-caramel/10 cursor-pointer transition-colors shrink-0" title="Upload Photo from Files">
+            <i data-lucide="image" class="w-5 h-5"></i>
+            <input type="file" id="filePickerInput" accept="image/*" class="hidden" onchange="handleImageUpload(event)">
+          </label>
+          <!-- Submit Button -->
+          <button onclick="handleSearch()" class="bg-caramel hover:bg-caramelHover text-white px-3.5 sm:px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-1 transition-colors shadow shrink-0">
+            <span>Sort</span>
+            <i data-lucide="arrow-right" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- QUICK SAMPLE PILLS -->
+      <div class="flex items-center gap-2 overflow-x-auto no-scrollbar pt-4 text-xs font-semibold">
+        <button onclick="quickQuery('computer mouse')" class="bg-white/10 hover:bg-white/20 text-white px-3.5 py-1.5 rounded-full whitespace-nowrap transition-colors">🖱️ Computer Mouse</button>
+        <button onclick="quickQuery('biscuit wrapper')" class="bg-white/10 hover:bg-white/20 text-white px-3.5 py-1.5 rounded-full whitespace-nowrap transition-colors">🍪 MLP Wrapper</button>
+        <button onclick="quickQuery('umbrella')" class="bg-white/10 hover:bg-white/20 text-white px-3.5 py-1.5 rounded-full whitespace-nowrap transition-colors">☂️ Umbrella</button>
+        <button onclick="quickQuery('blanket')" class="bg-white/10 hover:bg-white/20 text-white px-3.5 py-1.5 rounded-full whitespace-nowrap transition-colors">🧵 Blanket</button>
+        <button onclick="quickQuery('pizza box')" class="bg-white/10 hover:bg-white/20 text-white px-3.5 py-1.5 rounded-full whitespace-nowrap transition-colors">🍕 Pizza Box</button>
+        <button onclick="quickQuery('banana peel')" class="bg-white/10 hover:bg-white/20 text-white px-3.5 py-1.5 rounded-full whitespace-nowrap transition-colors">🥗 Kitchen Peels</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- LIVE WEBCAM SCANNER MODAL -->
+  <div id="webcamModal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-cardBg rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-borderSubtle">
+      <div class="p-4 border-b border-borderSubtle flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-xl bg-caramel/10 flex items-center justify-center text-caramel">
+            <i data-lucide="camera" class="w-4 h-4"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-slate-900 text-sm sm:text-base">Live Camera Scanner</h3>
+            <p class="text-[11px] text-slate-500">Multimodal Waste Vision Stream</p>
+          </div>
+        </div>
+        <button onclick="closeWebcam()" class="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500 transition-colors">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      
+      <div class="p-4 space-y-3">
+        <div class="relative rounded-2xl overflow-hidden bg-black aspect-video flex items-center justify-center shadow-inner">
+          <video id="webcamFeed" autoplay playsinline muted class="w-full h-full object-cover"></video>
+          <div id="webcamLoading" class="absolute inset-0 bg-black/70 flex flex-col items-center justify-center text-white text-xs gap-2">
+            <div class="w-8 h-8 border-2 border-caramel border-t-transparent rounded-full animate-spin"></div>
+            <span>Requesting camera access...</span>
+          </div>
+        </div>
+        <canvas id="captureCanvas" class="hidden"></canvas>
+        
+        <div class="flex items-center justify-between text-xs text-slate-500 px-1">
+          <span class="flex items-center gap-1.5 font-medium"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>Live Video Feed</span>
+          <span>Hold object clearly in front of camera</span>
+        </div>
+
+        <div class="pt-2 flex gap-2">
+          <button onclick="capturePhoto()" class="flex-1 bg-caramel hover:bg-caramelHover text-white py-3 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-colors shadow">
+            <i data-lucide="camera" class="w-4 h-4"></i>
+            <span>Capture & Identify Waste</span>
+          </button>
+          <button onclick="closeWebcam()" class="px-4 py-3 rounded-2xl border border-borderSubtle text-slate-600 font-semibold text-sm hover:bg-slate-50 transition-colors">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN CONTENT CONTAINER -->
+  <main class="max-w-2xl mx-auto w-full px-4 sm:px-6 py-6 space-y-6">
+
+    <!-- NOTICE / GREETING BANNER -->
+    <div id="noticeBanner" class="hidden bg-amber-50 border border-amber-200 rounded-2xl p-4 text-amber-900 text-sm">
+      <div class="flex items-start gap-3">
+        <i data-lucide="info" class="w-5 h-5 text-amber-600 shrink-0 mt-0.5"></i>
+        <div>
+          <h4 class="font-bold text-amber-800">Notice</h4>
+          <p id="noticeText" class="mt-0.5 leading-relaxed"></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- LOADING STATE CARD -->
+    <div id="loadingCard" class="hidden bg-cardBg rounded-3xl p-8 border border-borderSubtle shadow-sm text-center space-y-3">
+      <div class="w-10 h-10 rounded-full border-3 border-caramel border-t-transparent animate-spin mx-auto"></div>
+      <div class="space-y-1">
+        <h3 id="loadingText" class="text-base font-bold text-slate-900">Analyzing with Meta Llama 3.2...</h3>
+        <p class="text-xs text-slate-500">Executing multimodal perception & Swachh Bharat advisory on Arm SoC</p>
+      </div>
+    </div>
+
+    <!-- INITIAL WELCOME CARD (Shown before scan) -->
+    <div id="welcomeCard" class="bg-cardBg rounded-3xl p-6 sm:p-8 text-center border border-borderSubtle shadow-sm space-y-4">
+      <div class="w-16 h-16 rounded-2xl bg-caramel/10 flex items-center justify-center mx-auto text-caramel">
+        <i data-lucide="recycle" class="w-8 h-8"></i>
+      </div>
+      <div>
+        <h2 class="text-xl font-bold text-slate-900">Ready to Segregate Waste</h2>
+        <p class="text-sm text-slate-500 max-w-md mx-auto mt-1 leading-relaxed">
+          Type an item name, tap the microphone to speak, snap a photo with your webcam, or upload an image to receive Swachh Bharat Mission (SBM 2.0) bin guidance, recycling science, and environmental metrics.
+        </p>
+      </div>
+      <div class="grid grid-cols-3 gap-3 pt-2 text-left">
+        <div class="bg-blue-50 border border-blue-100 p-3 rounded-2xl">
+          <div class="w-3 h-3 rounded-full bg-blue-600 mb-1"></div>
+          <h4 class="font-bold text-blue-900 text-xs">Blue Bin</h4>
+          <p class="text-[11px] text-blue-700 mt-0.5">Dry Recyclables & Plastics</p>
+        </div>
+        <div class="bg-green-50 border border-green-100 p-3 rounded-2xl">
+          <div class="w-3 h-3 rounded-full bg-green-600 mb-1"></div>
+          <h4 class="font-bold text-green-900 text-xs">Green Bin</h4>
+          <p class="text-[11px] text-green-700 mt-0.5">Wet Organic Food</p>
+        </div>
+        <div class="bg-red-50 border border-red-100 p-3 rounded-2xl">
+          <div class="w-3 h-3 rounded-full bg-red-600 mb-1"></div>
+          <h4 class="font-bold text-red-900 text-xs">Red Bin</h4>
+          <p class="text-[11px] text-red-700 mt-0.5">Domestic E-Waste & Toxic</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- RESULTS SECTION (Hidden initially) -->
+    <div id="resultsSection" class="hidden space-y-6">
+
+      <!-- SCANNED IMAGE PREVIEW (Optional, shown when image scanned) -->
+      <div id="scannedImageCard" class="hidden bg-cardBg rounded-3xl p-4 border border-borderSubtle shadow-sm flex items-center gap-4">
+        <img id="scannedImagePreview" class="w-20 h-20 rounded-2xl object-cover bg-slate-100 border border-borderSubtle shrink-0" alt="Scanned item">
+        <div>
+          <span class="text-[11px] font-bold uppercase tracking-wider text-caramel">Visual Input</span>
+          <h4 id="scannedImageLabel" class="font-bold text-slate-900 text-sm">Captured Photo</h4>
+          <p class="text-xs text-slate-500 mt-0.5">Analyzed via Meta Llama 3.2 Vision on Arm SoC</p>
+        </div>
+      </div>
+
+      <!-- HERO SWACHH BHARAT TARGET STREAM BANNER -->
+      <div id="streamCard" class="rounded-3xl p-6 text-white shadow-md transition-all duration-300">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs uppercase font-extrabold tracking-wider opacity-90">Swachh Bharat Target Stream</span>
+          <span id="runtimeBadge" class="text-xs font-semibold bg-black/20 px-2.5 py-0.5 rounded-full">ExecuTorch INT4</span>
+        </div>
+        <h2 id="streamBinName" class="text-xl sm:text-2xl font-black tracking-tight leading-snug"></h2>
+        <p id="streamRec" class="text-sm sm:text-base mt-2 opacity-95 font-medium leading-relaxed"></p>
+        <div class="mt-4 pt-3 border-t border-white/20 flex items-center justify-between text-xs font-semibold">
+          <span id="detectedItemName" class="opacity-90"></span>
+          <span id="latencySpan" class="opacity-90"></span>
+        </div>
+      </div>
+
+      <!-- RECYCLING & MATERIAL SCIENCE (Llama 3.2 Breakdown) -->
+      <div class="bg-cardBg rounded-3xl p-6 border border-borderSubtle shadow-sm space-y-3">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
+            <i data-lucide="layers" class="w-4 h-4"></i>
+          </div>
+          <h3 class="text-base font-bold text-slate-900">Advisory & Recycling Details</h3>
+        </div>
+        <ul id="recyclingList" class="space-y-2 text-sm text-slate-600 pt-1"></ul>
+      </div>
+
+      <!-- ACTION INSTRUCTIONS FOR DISPOSAL -->
+      <div class="bg-cardBg rounded-3xl p-6 border border-borderSubtle shadow-sm space-y-3">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-xl bg-green-50 flex items-center justify-center text-green-600">
+            <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+          </div>
+          <h3 class="text-base font-bold text-slate-900">Action Instructions for Disposal</h3>
+        </div>
+        <div id="actionList" class="space-y-2.5 pt-1"></div>
+      </div>
+
+      <!-- ENVIRONMENTAL IMPACT & CIRCULAR ECONOMY -->
+      <div class="bg-cardBg rounded-3xl p-6 border border-borderSubtle shadow-sm space-y-4">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
+            <i data-lucide="leaf" class="w-4 h-4"></i>
+          </div>
+          <h3 class="text-base font-bold text-slate-900">Environmental Impact & Circular Economy</h3>
+        </div>
+        <p id="impactDesc" class="text-sm text-slate-600 leading-relaxed"></p>
+        <div class="grid grid-cols-2 gap-3 pt-1">
+          <div class="bg-emerald-50/60 border border-emerald-100 rounded-2xl p-4 text-center">
+            <div class="text-xs font-bold text-emerald-800 uppercase tracking-wider">Avoided CO₂</div>
+            <div id="co2Val" class="text-2xl font-black text-emerald-900 mt-1"></div>
+          </div>
+          <div class="bg-emerald-50/60 border border-emerald-100 rounded-2xl p-4 text-center">
+            <div class="text-xs font-bold text-emerald-800 uppercase tracking-wider">Energy Conserved</div>
+            <div id="energyVal" class="text-2xl font-black text-emerald-900 mt-1"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CONVERSATIONAL FOLLOW-UP Q&A -->
+      <div class="bg-cardBg rounded-3xl p-6 border border-borderSubtle shadow-sm space-y-4">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-xl bg-caramel/10 flex items-center justify-center text-caramel">
+            <i data-lucide="message-square" class="w-4 h-4"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-slate-900">Ask Follow-up Questions</h3>
+            <p class="text-xs text-slate-500">Ask Meta Llama 3.2 anything about recycling, scrap dealers, or hazards</p>
+          </div>
+        </div>
+
+        <!-- Chat Feed -->
+        <div id="chatFeed" class="space-y-3 max-h-60 overflow-y-auto pr-1 text-sm"></div>
+
+        <!-- Inline Follow-up Input -->
+        <div class="flex items-center gap-2 pt-2">
+          <input 
+            id="followupInput"
+            type="text" 
+            placeholder="e.g., Can I sell this to kabadiwala? Is burning safe?" 
+            class="flex-1 bg-creamBg text-sm text-slate-800 border border-borderSubtle rounded-2xl px-4 py-2.5 focus:outline-none focus:border-caramel"
+            onkeydown="if(event.key === 'Enter') submitFollowup()"
+          />
+          <button onclick="submitFollowup()" class="bg-caramel hover:bg-caramelHover text-white px-4 py-2.5 rounded-2xl font-bold text-sm transition-colors shadow">
+            Ask
+          </button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- REAL-TIME HARDWARE & TELEMETRY CARD -->
+    <div class="bg-cardBg rounded-3xl p-6 border border-borderSubtle shadow-sm space-y-3">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <div class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></div>
+          <span class="text-xs font-extrabold uppercase tracking-wider text-slate-800">Real-Time Arm SoC Telemetry</span>
+        </div>
+        <span class="text-xs font-semibold text-caramel">Bharat AI-SoC Edge</span>
+      </div>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+        <div class="bg-creamBg p-3 rounded-2xl border border-borderSubtle">
+          <span class="text-[11px] font-bold text-slate-400 uppercase">Device SoC</span>
+          <p id="telemSoc" class="text-xs font-bold text-slate-800 mt-0.5 truncate">Detecting...</p>
+        </div>
+        <div class="bg-creamBg p-3 rounded-2xl border border-borderSubtle">
+          <span class="text-[11px] font-bold text-slate-400 uppercase">Memory</span>
+          <p id="telemRam" class="text-xs font-bold text-slate-800 mt-0.5">--</p>
+        </div>
+        <div class="bg-creamBg p-3 rounded-2xl border border-borderSubtle">
+          <span class="text-[11px] font-bold text-slate-400 uppercase">Architecture</span>
+          <p id="telemArch" class="text-xs font-bold text-slate-800 mt-0.5">Cortex-A</p>
+        </div>
+        <div class="bg-creamBg p-3 rounded-2xl border border-borderSubtle">
+          <span class="text-[11px] font-bold text-slate-400 uppercase">AI Latency</span>
+          <p id="telemLatency" class="text-xs font-bold text-emerald-600 mt-0.5">-- ms</p>
+        </div>
+      </div>
+      <p class="text-[11px] text-center text-slate-400">Live hardware telemetry measured directly on your edge device.</p>
+    </div>
+
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="text-center py-6 text-xs text-slate-400 border-t border-borderSubtle mt-10">
+    <p>EcoSort-Arm • Powered by Meta Llama 3.2 on ExecuTorch • Bharat AI-SoC Challenge 2026–27</p>
+  </footer>
+
+  <script>
+    let currentItem = "";
+    let chatHistory = [];
+    let mediaStream = null;
+
+    // Initialize Lucide Icons
+    lucide.createIcons();
+
+    // Fetch Telemetry on Load and periodically
+    async function updateTelemetry() {
+      try {
+        const res = await fetch('/api/telemetry');
+        const data = await res.json();
+        document.getElementById('telemSoc').innerText = data.soc_model;
+        document.getElementById('telemRam').innerText = data.ram_free;
+        document.getElementById('telemArch').innerText = data.cpu_arch.replace(' (Arm Emulation)', '');
+        document.getElementById('telemLatency').innerText = data.ai_latency_ms;
+      } catch (err) {
+        console.log("Telemetry fetch notice:", err);
+      }
+    }
+    updateTelemetry();
+    setInterval(updateTelemetry, 5000);
+
+    function showLoading(msg = "Analyzing with Meta Llama 3.2...") {
+      document.getElementById('loadingText').innerText = msg;
+      document.getElementById('loadingCard').classList.remove('hidden');
+      document.getElementById('welcomeCard').classList.add('hidden');
+      document.getElementById('resultsSection').classList.add('hidden');
+      document.getElementById('noticeBanner').classList.add('hidden');
+    }
+
+    function hideLoading() {
+      document.getElementById('loadingCard').classList.add('hidden');
+    }
+
+    function quickQuery(text) {
+      document.getElementById('queryInput').value = text;
+      handleSearch();
+    }
+
+    // --- WEBCAM STREAM CONTROLS ---
+    async function openWebcam() {
+      const modal = document.getElementById('webcamModal');
+      modal.classList.remove('hidden');
+      const video = document.getElementById('webcamFeed');
+      const loading = document.getElementById('webcamLoading');
+      loading.classList.remove('hidden');
+
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+        });
+        video.srcObject = mediaStream;
+        video.onloadedmetadata = () => {
+          video.play();
+          loading.classList.add('hidden');
+        };
+      } catch (err) {
+        loading.innerHTML = `<span class="text-rose-400 p-4 text-center font-medium">Camera access error: ${err.message}. Please allow browser camera permissions or use the file upload button instead.</span>`;
+      }
+      lucide.createIcons();
+    }
+
+    function closeWebcam() {
+      if (mediaStream) {
+        mediaStream.getTracks().forEach(track => track.stop());
+        mediaStream = null;
+      }
+      document.getElementById('webcamModal').classList.add('hidden');
+    }
+
+    function capturePhoto() {
+      const video = document.getElementById('webcamFeed');
+      const canvas = document.getElementById('captureCanvas');
+      if (!video || !video.videoWidth) return;
+
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      const base64Data = canvas.toDataURL('image/jpeg', 0.85);
+      closeWebcam();
+
+      // Show preview & analyze
+      showScannedImagePreview(base64Data, "Webcam Snapshot");
+      analyzePhotoData(base64Data);
+    }
+
+    function handleImageUpload(evt) {
+      const file = evt.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const base64Data = e.target.result;
+        showScannedImagePreview(base64Data, file.name);
+        analyzePhotoData(base64Data);
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function showScannedImagePreview(src, label) {
+      const card = document.getElementById('scannedImageCard');
+      const img = document.getElementById('scannedImagePreview');
+      const lbl = document.getElementById('scannedImageLabel');
+      img.src = src;
+      lbl.innerText = label;
+      card.classList.remove('hidden');
+    }
+
+    async function analyzePhotoData(base64Data) {
+      showLoading("Inspecting physical object with Meta Llama 3.2 Vision...");
+      try {
+        const res = await fetch('/api/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            query: "identify physical waste object from camera image",
+            image_base64: base64Data
+          })
+        });
+        const data = await res.json();
+        renderAnalysisResult(data);
+      } catch (err) {
+        hideLoading();
+        alert("Error analyzing waste photo: " + err);
+      }
+    }
+
+    async function handleSearch() {
+      const q = document.getElementById('queryInput').value.trim();
+      if (!q) return;
+
+      showLoading("Analyzing with Meta Llama 3.2 on ExecuTorch...");
+      document.getElementById('scannedImageCard').classList.add('hidden');
+
+      try {
+        const res = await fetch('/api/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: q })
+        });
+        const data = await res.json();
+        renderAnalysisResult(data);
+      } catch (err) {
+        hideLoading();
+        alert("Error analyzing waste item: " + err);
+      }
+    }
+
+    function renderAnalysisResult(data) {
+      hideLoading();
+
+      if (!data.is_waste_eligible) {
+        document.getElementById('noticeBanner').classList.remove('hidden');
+        document.getElementById('noticeText').innerText = data.disposal_recommendation;
+        document.getElementById('resultsSection').classList.add('hidden');
+        document.getElementById('welcomeCard').classList.remove('hidden');
+        return;
+      }
+
+      // Hide notice and welcome, show results
+      document.getElementById('noticeBanner').classList.add('hidden');
+      document.getElementById('welcomeCard').classList.add('hidden');
+      document.getElementById('resultsSection').classList.remove('hidden');
+
+      currentItem = data.detected_name;
+      chatHistory = [];
+      document.getElementById('chatFeed').innerHTML = '';
+
+      // Render Stream Card
+      const streamCard = document.getElementById('streamCard');
+      const color = data.stream.bin_color;
+      streamCard.className = `rounded-3xl p-6 text-white shadow-md transition-all duration-300 ${
+        color === 'blue' ? 'bg-sbmBlue' : color === 'green' ? 'bg-sbmGreen' : 'bg-sbmRed'
+      }`;
+      document.getElementById('streamBinName').innerText = data.stream.bin_name;
+      document.getElementById('streamRec').innerText = data.disposal_recommendation;
+      document.getElementById('detectedItemName').innerText = `📦 ${data.detected_name}`;
+      document.getElementById('latencySpan').innerText = `⚡ ${data.latency_ms} ms`;
+      document.getElementById('runtimeBadge').innerText = data.runtime;
+
+      // Render Recycling Science
+      const rList = document.getElementById('recyclingList');
+      rList.innerHTML = '';
+      data.recycling_science.forEach(pt => {
+        const li = document.createElement('li');
+        li.className = "flex items-start gap-2.5";
+        li.innerHTML = `<span class="text-caramel font-black text-lg leading-4">•</span><span>${pt}</span>`;
+        rList.appendChild(li);
+      });
+
+      // Render Action Instructions
+      const aList = document.getElementById('actionList');
+      aList.innerHTML = '';
+      data.action_instructions.forEach((act, idx) => {
+        const div = document.createElement('div');
+        div.className = "flex items-start gap-3 bg-creamBg p-3 rounded-2xl border border-borderSubtle";
+        div.innerHTML = `
+          <div class="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
+            ${idx + 1}
+          </div>
+          <p class="text-sm font-medium text-slate-800">${act}</p>
+        `;
+        aList.appendChild(div);
+      });
+
+      // Render Impact
+      document.getElementById('impactDesc').innerText = data.environmental_impact;
+      document.getElementById('co2Val').innerText = `${data.avoided_co2_grams} g`;
+      document.getElementById('energyVal').innerText = `${data.energy_saved_percent}%`;
+
+      lucide.createIcons();
+      window.scrollTo({ top: 180, behavior: 'smooth' });
+    }
+
+    function resetApp() {
+      document.getElementById('queryInput').value = '';
+      document.getElementById('noticeBanner').classList.add('hidden');
+      document.getElementById('resultsSection').classList.add('hidden');
+      document.getElementById('loadingCard').classList.add('hidden');
+      document.getElementById('scannedImageCard').classList.add('hidden');
+      document.getElementById('welcomeCard').classList.remove('hidden');
+      closeWebcam();
+      currentItem = "";
+      chatHistory = [];
+    }
+
+    // Voice Input via Web Speech API
+    function toggleVoice() {
+      if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+        alert("Web Speech API is not supported in this browser. Please type your item.");
+        return;
+      }
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const rec = new SpeechRecognition();
+      rec.lang = 'en-IN';
+      rec.onstart = () => {
+        document.getElementById('micBtn').classList.add('bg-caramel/20', 'animate-pulse');
+      };
+      rec.onresult = (evt) => {
+        const transcript = evt.results[0][0].transcript;
+        document.getElementById('queryInput').value = transcript;
+        handleSearch();
+      };
+      rec.onend = () => {
+        document.getElementById('micBtn').classList.remove('bg-caramel/20', 'animate-pulse');
+      };
+      rec.start();
+    }
+
+    // Follow-up Chat
+    async function submitFollowup() {
+      const input = document.getElementById('followupInput');
+      const q = input.value.trim();
+      if (!q) return;
+      input.value = '';
+      await askFollowup(q);
+    }
+
+    async function askFollowup(question) {
+      const feed = document.getElementById('chatFeed');
+      
+      // User bubble
+      const userDiv = document.createElement('div');
+      userDiv.className = "flex justify-end";
+      userDiv.innerHTML = `<div class="bg-caramel text-white text-xs font-medium px-3.5 py-2 rounded-2xl max-w-[80%] shadow-sm">${question}</div>`;
+      feed.appendChild(userDiv);
+
+      try {
+        const res = await fetch('/api/followup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            question: question,
+            context_item: currentItem,
+            history: chatHistory
+          })
+        });
+        const data = await res.json();
+        
+        // Assistant bubble
+        const asstDiv = document.createElement('div');
+        asstDiv.className = "flex justify-start";
+        asstDiv.innerHTML = `<div class="bg-slate-100 text-slate-800 text-xs font-medium px-3.5 py-2.5 rounded-2xl max-w-[85%] border border-borderSubtle leading-relaxed">${data.reply}</div>`;
+        feed.appendChild(asstDiv);
+        feed.scrollTop = feed.scrollHeight;
+
+        chatHistory.push({ role: "user", content: question });
+        chatHistory.push({ role: "assistant", content: data.reply });
+
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  </script>
+</body>
+</html>
