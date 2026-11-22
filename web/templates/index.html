@@ -420,12 +420,25 @@
       const canvas = document.getElementById('captureCanvas');
       if (!video || !video.videoWidth) return;
 
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      let w = video.videoWidth;
+      let h = video.videoHeight;
+      const maxDim = 480;
+      if (w > maxDim || h > maxDim) {
+        if (w > h) {
+          h = Math.round((h * maxDim) / w);
+          w = maxDim;
+        } else {
+          w = Math.round((w * maxDim) / h);
+          h = maxDim;
+        }
+      }
 
-      const base64Data = canvas.toDataURL('image/jpeg', 0.85);
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, w, h);
+
+      const base64Data = canvas.toDataURL('image/jpeg', 0.7);
       closeWebcam();
 
       // Show preview & analyze
@@ -438,9 +451,31 @@
       if (!file) return;
       const reader = new FileReader();
       reader.onload = (e) => {
-        const base64Data = e.target.result;
-        showScannedImagePreview(base64Data, file.name);
-        analyzePhotoData(base64Data);
+        const rawData = e.target.result;
+        const img = new Image();
+        img.onload = () => {
+          let w = img.width;
+          let h = img.height;
+          const maxDim = 480;
+          if (w > maxDim || h > maxDim) {
+            if (w > h) {
+              h = Math.round((h * maxDim) / w);
+              w = maxDim;
+            } else {
+              w = Math.round((w * maxDim) / h);
+              h = maxDim;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          const base64Data = canvas.toDataURL('image/jpeg', 0.7);
+          showScannedImagePreview(base64Data, file.name);
+          analyzePhotoData(base64Data);
+        };
+        img.src = rawData;
       };
       reader.readAsDataURL(file);
     }
