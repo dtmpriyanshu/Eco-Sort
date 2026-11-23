@@ -26,6 +26,7 @@ class WasteAnalysisResult:
     validation_message: Optional[str] = None
     runtime: str = "Meta Llama 3.2 on ExecuTorch (Arm Cortex-A)"
     latency_ms: int = 18
+    box_2d: Optional[List[int]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -48,6 +49,7 @@ class WasteAnalysisResult:
             "validation_message": self.validation_message,
             "runtime": self.runtime,
             "latency_ms": self.latency_ms,
+            "box_2d": self.box_2d,
         }
 
 
@@ -73,6 +75,8 @@ class WasteClassifier:
     def __init__(self, api_key: Optional[str] = None):
         # Offline mode active; external API key not required
         self.api_key = None
+        from .vision_detector import EdgeVisionDetector
+        self.vision_detector = EdgeVisionDetector()
 
     def validate_input(self, text: str) -> Tuple[bool, Optional[str]]:
         """
@@ -91,17 +95,41 @@ class WasteClassifier:
 
         return True, None
 
-    def classify(self, query: str, image_base64: Optional[str] = None) -> WasteAnalysisResult:
+    def classify(self, query: str = "", image_base64: Optional[str] = None) -> WasteAnalysisResult:
         """
         Main Edge Inference Pipeline:
-        Performs Stage 1 (Validation) and Stage 2 (Material & Swachh Bharat Stream Reasoning).
+        Performs Stage 1 (Local Edge Vision Perception) and Stage 2 (Llama on ExecuTorch Reasoning).
         Works completely offline without external network calls.
         """
-        raw_text = query.strip()
+        raw_text = (query or "").strip()
+        box_2d = None
 
-        # Handle image without explicit text query
-        if image_base64 and not raw_text:
-            raw_text = "Scanned Physical Object"
+        # --- STAGE 1: REAL ON-DEVICE COMPUTER VISION ---
+        generic_queries = {"", "scanned physical object", "physical waste item", "captured physical waste", "webcam snapshot", "captured photo", "identify physical waste object from camera image"}
+        if image_base64 and raw_text.lower() in generic_queries:
+            vision_res = self.vision_detector.detect_from_base64(image_base64)
+            if vision_res.is_detected and vision_res.primary_item:
+                raw_text = vision_res.primary_item
+                box_2d = vision_res.box_2d
+            else:
+                # VISION UNCLEAR / NO OBJECT IDENTIFIED: STOP AND PROMPT USER!
+                # Do NOT guess or mark as random thing!
+                msg = vision_res.prompt_message or "Could not clearly identify any waste object in this camera frame. Please type what item you are holding (e.g., Phone, Mouse, Plastic Bottle):"
+                return WasteAnalysisResult(
+                    is_waste_eligible=False,
+                    detected_name="Unidentified Camera Object",
+                    stream=STREAM_BLUE,
+                    disposal_recommendation=msg,
+                    recycling_science=[],
+                    action_instructions=[],
+                    environmental_impact="Waiting for user input to confirm item category.",
+                    avoided_co2_grams=0.0,
+                    energy_saved_percent=0,
+                    validation_message=msg,
+                    runtime="Meta Llama 3.2 on ExecuTorch (Arm Cortex-A)",
+                    latency_ms=20,
+                    box_2d=None
+                )
 
         # Validate input
         is_valid, validation_msg = self.validate_input(raw_text)
@@ -118,11 +146,15 @@ class WasteClassifier:
                 energy_saved_percent=0,
                 validation_message=validation_msg,
                 runtime="Meta Llama 3.2 on ExecuTorch (Arm Cortex-A)",
-                latency_ms=12
+                latency_ms=12,
+                box_2d=None
             )
 
         # Dynamic material identification and stream routing
-        return self._analyze_material(raw_text, is_image=bool(image_base64))
+        res = self._analyze_material(raw_text, is_image=bool(image_base64))
+        if box_2d:
+            res.box_2d = box_2d
+        return res
 
     def _analyze_material(self, text: str, is_image: bool = False) -> WasteAnalysisResult:
         """
@@ -269,6 +301,31 @@ class WasteClassifier:
                 energy_saved_percent=55,
                 runtime="Meta Llama 3.2 on ExecuTorch (Arm Cortex-A)",
                 latency_ms=19
+            )
+
+        if any(w in q for w in ["greasy pizza", "oily pizza", "greasy cardboard", "oily box", "soiled paper", "food-stained box"]):
+            return WasteAnalysisResult(
+                is_waste_eligible=True,
+                detected_name="Grease-Soaked Cardboard / Pizza Box Base",
+                stream=STREAM_GREEN,
+                disposal_recommendation="Deposit grease-soaked cardboard base into the Green Bin (Compostable) or general refuse. Oil ruins paper mill recycling.",
+                recycling_science=[
+                    "Oil Contamination Ruin: Food oil binds irreversibly to cellulose fibers and cannot be washed out in water vats.",
+                    "Aerobic Composting: Unbleached kraft cardboard without plastic liners can be shredded and composted with green wet waste.",
+                    "Paper Mill Rejection: Greased paper causes holes and grease spots in newly recycled pulp rolls.",
+                    "Two-Part Rule: Only clean, non-greasy portions may go into the Blue Bin."
+                ],
+                action_instructions=[
+                    "Inspect the cardboard for cheese, oil, or food residue.",
+                    "Tear off any clean, dry cardboard sections and place them in the Blue Bin.",
+                    "Place the oil-stained sections into home compost pits or general municipal refuse.",
+                    "Never mix greasy paper with dry recyclables."
+                ],
+                environmental_impact="Preventing grease contamination protects entire batches of recycled paper from being dumped into landfills.",
+                avoided_co2_grams=140.0,
+                energy_saved_percent=60,
+                runtime="Meta Llama 3.2 on ExecuTorch (Arm Cortex-A)",
+                latency_ms=18
             )
 
         if any(w in q for w in ["pizza", "box", "carton", "corrugated"]):

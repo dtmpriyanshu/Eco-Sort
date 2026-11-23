@@ -586,6 +586,9 @@
       currentItem = data.detected_name;
       chatHistory = [];
       document.getElementById('chatFeed').innerHTML = '';
+      if (document.getElementById('scannedImageLabel')) {
+        document.getElementById('scannedImageLabel').innerText = `Detected: ${data.detected_name}`;
+      }
 
       // Render Stream Card
       const streamCard = document.getElementById('streamCard');

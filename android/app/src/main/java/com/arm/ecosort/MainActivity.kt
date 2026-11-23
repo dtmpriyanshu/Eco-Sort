@@ -216,10 +216,27 @@ fun EcoSortApp() {
                 result = WasteDataProvider.analyzeImageWithLlamaVision(apiKey, base64Image)
             }
 
-            val finalResult = result ?: WasteDataProvider.classifyItemOffline("packaging plastic wrapper")
+            val queryHint = chatQuery.trim()
+            val finalResult = result ?: if (queryHint.isNotBlank()) {
+                WasteDataProvider.classifyItemOffline(queryHint)
+            } else {
+                null
+            }
+
             val elapsed = System.currentTimeMillis() - startTime
             isLoading = false
-            applyResult(finalResult, userQueryText = "Photo of ${finalResult.detectedName}", elapsedMs = elapsed)
+
+            if (finalResult == null) {
+                // STOP AND ASK THE USER: Do not guess or return canned responses!
+                noticeMessage = "Could not clearly identify any waste object in this photo. Please type or tap what item you are holding (e.g., Phone, Mouse, Bottle):"
+                Toast.makeText(context, "Please type or tap the item name to continue", Toast.LENGTH_LONG).show()
+            } else if (finalResult.isGreeting) {
+                noticeMessage = finalResult.greetingText
+                Toast.makeText(context, finalResult.greetingText, Toast.LENGTH_LONG).show()
+            } else {
+                noticeMessage = null
+                applyResult(finalResult, userQueryText = "Photo of ${finalResult.detectedName}", elapsedMs = elapsed)
+            }
         }
     }
 
@@ -556,6 +573,7 @@ fun EcoSortApp() {
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             val chips = listOf(
+                                "📱 Phone (E-Waste)" to "smartphone",
                                 "🖱️ Mouse (E-Waste)" to "computer mouse",
                                 "🍪 MLP Wrapper" to "biscuit wrapper",
                                 "☂️ Umbrella" to "umbrella",
