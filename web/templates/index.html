@@ -95,13 +95,14 @@
 
       <!-- QUICK SAMPLE PILLS -->
       <div class="flex items-center gap-2 overflow-x-auto no-scrollbar pt-4 text-xs font-semibold">
+        <button onclick="quickQuery('phone charger')" class="bg-white/10 hover:bg-white/20 text-white px-3.5 py-1.5 rounded-full whitespace-nowrap transition-colors">⚡ Phone Charger</button>
         <button onclick="quickQuery('smartphone')" class="bg-white/10 hover:bg-white/20 text-white px-3.5 py-1.5 rounded-full whitespace-nowrap transition-colors">📱 Mobile Phone</button>
         <button onclick="quickQuery('computer mouse')" class="bg-white/10 hover:bg-white/20 text-white px-3.5 py-1.5 rounded-full whitespace-nowrap transition-colors">🖱️ Computer Mouse</button>
         <button onclick="quickQuery('biscuit wrapper')" class="bg-white/10 hover:bg-white/20 text-white px-3.5 py-1.5 rounded-full whitespace-nowrap transition-colors">🍪 MLP Wrapper</button>
         <button onclick="quickQuery('umbrella')" class="bg-white/10 hover:bg-white/20 text-white px-3.5 py-1.5 rounded-full whitespace-nowrap transition-colors">☂️ Umbrella</button>
         <button onclick="quickQuery('blanket')" class="bg-white/10 hover:bg-white/20 text-white px-3.5 py-1.5 rounded-full whitespace-nowrap transition-colors">🧵 Blanket</button>
         <button onclick="quickQuery('pizza box')" class="bg-white/10 hover:bg-white/20 text-white px-3.5 py-1.5 rounded-full whitespace-nowrap transition-colors">🍕 Pizza Box</button>
-        <button onclick="quickQuery('banana peel')" class="bg-white/10 hover:bg-white/20 text-white px-3.5 py-1.5 rounded-full whitespace-nowrap transition-colors">🥗 Kitchen Peels</button>
+        <button onclick="quickQuery('cooked food rice plate')" class="bg-white/10 hover:bg-white/20 text-white px-3.5 py-1.5 rounded-full whitespace-nowrap transition-colors">🍲 Food Scraps</button>
       </div>
     </div>
   </header>
@@ -147,13 +148,13 @@
           </div>
           <input id="cameraItemHint" type="text" placeholder="e.g. Phone, Mouse, Bottle, Banana, Wrapper..." class="w-full bg-cream border border-borderSubtle rounded-xl px-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-caramel font-medium">
           <div class="flex flex-wrap gap-1.5 pt-0.5">
+            <button type="button" onclick="setCameraHint('Phone Charger / Power Adapter')" class="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-800 px-2.5 py-1 rounded-lg font-medium transition-colors">⚡ Charger / Adapter</button>
             <button type="button" onclick="setCameraHint('Old Smartphone / Mobile Phone')" class="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-800 px-2.5 py-1 rounded-lg font-medium transition-colors">📱 Phone</button>
             <button type="button" onclick="setCameraHint('Computer Mouse')" class="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-800 px-2.5 py-1 rounded-lg font-medium transition-colors">🖱️ Mouse</button>
             <button type="button" onclick="setCameraHint('Plastic Water Bottle')" class="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-800 px-2.5 py-1 rounded-lg font-medium transition-colors">🥤 Bottle</button>
-            <button type="button" onclick="setCameraHint('Banana Peel')" class="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-800 px-2.5 py-1 rounded-lg font-medium transition-colors">🍌 Food Peel</button>
+            <button type="button" onclick="setCameraHint('Cooked Food / Leftover Kitchen Scrap')" class="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-800 px-2.5 py-1 rounded-lg font-medium transition-colors">🍲 Food Scrap</button>
             <button type="button" onclick="setCameraHint('Pizza Box')" class="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-800 px-2.5 py-1 rounded-lg font-medium transition-colors">🍕 Pizza Box</button>
             <button type="button" onclick="setCameraHint('Biscuit Wrapper')" class="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-800 px-2.5 py-1 rounded-lg font-medium transition-colors">🍪 Wrapper</button>
-            <button type="button" onclick="setCameraHint('Cooked Food / Leftover Kitchen Scrap')" class="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-800 px-2.5 py-1 rounded-lg font-medium transition-colors">🍲 Food Scrap</button>
           </div>
         </div>
 

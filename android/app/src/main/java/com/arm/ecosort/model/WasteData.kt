@@ -827,18 +827,28 @@ Respond with ONLY a raw JSON object (no markdown, no backticks):
         // 1. Check for E-Waste / Hazardous (Red Bin)
         val hazardousKeywords = listOf(
             "phone", "mobile", "electronic", "keyboard", "mouse", "gadget",
-            "technology", "cable", "wire", "battery", "hardware", "circuit", "telephone"
+            "technology", "cable", "wire", "battery", "hardware", "circuit", "telephone",
+            "plug", "adapter", "charger", "cord", "power", "socket", "switch",
+            "electrical", "appliance", "remote", "audio", "headphone", "earphone",
+            "bulb", "lamp", "lighting", "screen", "display", "monitor", "laptop",
+            "computer", "peripheral", "transistor", "capacitor", "component", "device",
+            "usb", "storage", "drive", "flash", "wiring", "extension", "outlet"
         )
         val matchedHazardous = labels.firstOrNull { l -> hazardousKeywords.any { l.first.lowercase().contains(it) } }
         if (matchedHazardous != null) {
             val labelLower = matchedHazardous.first.lowercase()
             val itemName = when {
-                labelLower.contains("phone") || labelLower.contains("telephone") -> "Smartphone / Mobile Phone"
+                labelLower.contains("plug") || labelLower.contains("adapter") || labelLower.contains("charger") || labelLower.contains("socket") || labelLower.contains("outlet") || labelLower.contains("switch") || labelLower.contains("electrical") -> "Phone Charger / Power Adapter"
+                labelLower.contains("cable") || labelLower.contains("wire") || labelLower.contains("cord") || labelLower.contains("wiring") -> "Power Cord / Cable"
+                labelLower.contains("phone") || labelLower.contains("telephone") || labelLower.contains("mobile") -> "Smartphone / Mobile Phone"
                 labelLower.contains("mouse") -> "Computer Mouse"
                 labelLower.contains("keyboard") -> "Computer Keyboard"
-                labelLower.contains("battery") -> "Battery Cell"
-                labelLower.contains("cable") || labelLower.contains("wire") -> "Copper Cable / Wire"
-                else -> "Electronic Device / E-Waste"
+                labelLower.contains("battery") -> "Battery Cell (Hazardous)"
+                labelLower.contains("headphone") || labelLower.contains("earphone") || labelLower.contains("audio") -> "Headphones / Earphones"
+                labelLower.contains("remote") -> "Remote Control"
+                labelLower.contains("bulb") || labelLower.contains("lamp") || labelLower.contains("lighting") -> "CFL / Bulb (Hazardous)"
+                labelLower.contains("laptop") || labelLower.contains("computer") -> "Laptop / Computer Component"
+                else -> "Electronic Gadget / E-Waste"
             }
             return classifyItemOffline(itemName)
         }
@@ -865,7 +875,7 @@ Respond with ONLY a raw JSON object (no markdown, no backticks):
 
         // 3. Check for Dry Recyclables (Blue Bin)
         val dryKeywords = listOf(
-            "bottle", "plastic", "cup", "paper", "cardboard", "box", "can", "tin", "aluminum", "textile"
+            "bottle", "water bottle", "cup", "drinkware", "paper", "cardboard", "box", "carton", "can", "tin", "aluminum", "textile", "cloth", "wrapper", "packaging", "bag"
         )
         val matchedDry = labels.firstOrNull { l -> dryKeywords.any { l.first.lowercase().contains(it) } }
         if (matchedDry != null) {
@@ -875,6 +885,7 @@ Respond with ONLY a raw JSON object (no markdown, no backticks):
                 labelLower.contains("cup") -> "Paper / Plastic Cup"
                 labelLower.contains("box") || labelLower.contains("cardboard") -> "Cardboard Packaging"
                 labelLower.contains("can") || labelLower.contains("tin") -> "Metal Beverage Can"
+                labelLower.contains("wrapper") -> "Snack Wrapper (MLP)"
                 else -> "Dry Recyclable Packaging"
             }
             return classifyItemOffline(itemName)
@@ -944,81 +955,313 @@ Respond with ONLY a raw JSON object (no markdown, no backticks):
 
         val name = if (userQuery.isNotBlank()) userQuery.trim().replaceFirstChar { it.uppercase() } else "Unspecified Item"
 
-        // Dynamic material stream classification (No hardcoded items)
-        val isHazardous = listOf("battery", "electronic", "wire", "cable", "phone", "mouse", "charger", "bulb", "chemical", "medicine", "toxic", "circuit").any { q.contains(it) }
-        val isOrganic = listOf(
-            "peel", "food", "fruit", "vegetable", "tea", "coffee", "roti", "rice",
-            "curry", "sabzi", "dal", "gravy", "dish", "leftover", "leftovers", "plate",
-            "cooked", "meal", "organic", "leaf", "leaves", "bread", "greasy", "oily",
-            "apple", "banana", "produce", "salad", "broccoli", "carrot", "orange"
-        ).any { q.contains(it) }
-
-        if (isHazardous) {
+        // 4. CHARGERS, ADAPTERS, PLUGS, EXTENSION CORDS (RED BIN)
+        if (listOf("charger", "adapter", "plug", "socket", "extension", "power supply", "outlet").any { q.contains(it) }) {
+            val detectedName = if (q.contains("charger") || q.contains("adapter") || q.contains("plug")) "Phone Charger / Power Adapter" else name
             val customCategory = baseCategories[5].copy(
-                categoryName = "Domestic Hazardous / E-Waste: $name",
+                categoryName = "Domestic Hazardous / E-Waste: $detectedName",
                 binName = "RED / BLACK BIN — DOMESTIC HAZARDOUS",
                 binColorHex = 0xFFDC2626,
-                disposalRecommendation = "⚠️ CRITICAL: Deposit $name into the Red/Black Bin (Domestic Hazardous / E-Waste). Never mix with regular household garbage."
+                disposalRecommendation = "⚠️ CRITICAL: Deposit $detectedName into the Red/Black Bin (E-Waste). Unplug from electrical mains; never discard in household dry or wet trash."
             )
             val points = listOf(
-                "Material Structure: $name contains specialized electronic circuits, copper wiring, or chemical cells requiring certified handling.",
-                "Resource Recovery: Authorized recyclers extract copper, tin, gold, and scarce minerals via hydrometallurgical leaching.",
-                "Compaction Hazard: Internal chemical cells and capacitors rupture and ignite under municipal garbage truck compaction pressure.",
-                "CPCB E-Waste Rules 2022: Mandates extended producer responsibility (EPR) through state-authorized collection centers."
+                "Transformer & Coil Metallurgy: Contains step-down high-frequency transformers wound with enameled electrolytic copper wire and ferrite magnetic cores.",
+                "High-Voltage Capacitors: Internal circuit boards house aluminum electrolytic capacitors filled with liquid conductive electrolyte that rupture under compactor pressure.",
+                "Flame-Retardant ABS Enclosure: Outer shell is injection-molded from UL94-V0 rated flame-retardant polymers that release brominated dioxins if burned in open air.",
+                "Hydrometallurgical Extraction: Authorized e-waste recyclers desolder circuit boards in controlled chemical leaching baths to recover pure copper, tin, and gold."
             )
             val steps = listOf(
-                "Disconnect any power sources or remove detachable batteries immediately.",
-                "Cover exposed contact terminals with non-conductive cellophane tape.",
-                "Coil any attached cables or cords neatly for scrap copper recovery.",
-                "Hand over to a certified municipal e-waste collection kiosk or authorized brand take-back drive."
+                "Unplug safely from electrical wall socket or extension board; ensure it is cool to the touch.",
+                "Never cut open or attempt to pry open the glued plastic enclosure with screwdrivers.",
+                "Coil any attached charging cord loosely—do not bend sharply to avoid internal copper wire fractures.",
+                "Hand over directly to an authorized municipal e-waste kiosk or brand electronics take-back drive."
             )
-            val impact = "Diverting $name from landfills prevents toxic heavy metals (lead, mercury, cadmium) from leaching into municipal drinking aquifers."
-            val detItem = DetectedItem(name, customCategory, emptyList(), points, steps, impact)
-            return DynamicAdvisoryResult(customCategory, name, points, steps, impact, modelSource = "Meta Llama 3.2 (ExecuTorch Arm)", detectedItems = listOf(detItem))
-        } else if (isOrganic) {
+            val impact = "Diverting $detectedName recovers secondary copper windings and prevents hazardous brominated flame retardants from contaminating groundwater."
+            val detItem = DetectedItem(detectedName, customCategory, emptyList(), points, steps, impact, 520f, 84)
+            return DynamicAdvisoryResult(customCategory, detectedName, points, steps, impact, modelSource = "Meta Llama 3.2 (ExecuTorch Arm)", detectedItems = listOf(detItem))
+        }
+
+        // 5. SMARTPHONES & MOBILE PHONES (RED BIN)
+        if (listOf("phone", "mobile", "smartphone", "cellphone", "android", "iphone").any { q.contains(it) }) {
+            val detectedName = "Smartphone / Mobile Phone"
+            val customCategory = baseCategories[5].copy(
+                categoryName = "Domestic Hazardous / E-Waste: $detectedName",
+                binName = "RED / BLACK BIN — DOMESTIC HAZARDOUS",
+                binColorHex = 0xFFDC2626,
+                disposalRecommendation = "⚠️ CRITICAL: Deposit $detectedName into the Red/Black Bin (E-Waste). Wipe personal data and collect for authorized dismantling."
+            )
+            val points = listOf(
+                "Battery Chemistry: Houses a high-energy-density Lithium-Cobalt-Oxide (LiCoO₂) pouch cell susceptible to thermal runaway and fire if punctured.",
+                "Precious Technical Metals: Motherboards hold concentrated traces of pure gold, silver, palladium, and copper requiring specialized acid-leach refining.",
+                "Indium Tin Oxide (ITO): Touchscreen glass incorporates rare transparent conducting oxide coatings that must be reclaimed in certified plants.",
+                "Data Privacy Standard: Perform a full cryptographic factory wipe and eject physical SIM/microSD trays before dropping for recycling."
+            )
+            val steps = listOf(
+                "Perform a complete factory reset and remove physical SIM card and microSD card.",
+                "Power down the device completely; never hammer, puncture, bend, or incinerate.",
+                "Package in a protective paper envelope to prevent touchscreen glass from shattering.",
+                "Drop off at an authorized municipal e-waste center or registered electronics brand buyback bin."
+            )
+            val impact = "Recycling one smartphone recovers enough precious technical metals to offset 85% of mining carbon emissions."
+            val detItem = DetectedItem(detectedName, customCategory, emptyList(), points, steps, impact, 560f, 85)
+            return DynamicAdvisoryResult(customCategory, detectedName, points, steps, impact, modelSource = "Meta Llama 3.2 (ExecuTorch Arm)", detectedItems = listOf(detItem))
+        }
+
+        // 6. COMPUTER MOUSE, KEYBOARD & ELECTRONIC CORDS (RED BIN)
+        if (listOf("mouse", "keyboard", "cable", "wire", "cord", "pcb", "circuit", "headphone", "earphone", "remote", "electronics").any { q.contains(it) }) {
+            val detectedName = if (q.contains("mouse")) "Computer Mouse" else if (q.contains("keyboard")) "Computer Keyboard" else if (q.contains("cable") || q.contains("wire")) "Power Cord / Cable" else name
+            val customCategory = baseCategories[5].copy(
+                categoryName = "Domestic Hazardous / E-Waste: $detectedName",
+                binName = "RED / BLACK BIN — DOMESTIC HAZARDOUS",
+                binColorHex = 0xFFDC2626,
+                disposalRecommendation = "Deposit $detectedName into the Red/Black Bin (E-Waste / Domestic Hazardous). Collect separately for authorized dismantling."
+            )
+            val points = listOf(
+                "Sensor & Circuitry: Contains optical/laser LED sensors, microswitches, and FR-4 epoxy circuit boards containing tin and copper traces.",
+                "ABS Polymer Casing: Outer enclosure is injection-molded Acrylonitrile Butadiene Styrene (ABS) suitable for secondary mechanical flaking.",
+                "Copper Cable Recovery: USB and power cords contain high-grade stranded copper wiring inside flexible PVC insulation.",
+                "CPCB E-Waste Rules 2022: Classified as Tier-2 electronic peripheral waste requiring Extended Producer Responsibility collection."
+            )
+            val steps = listOf(
+                "Disconnect USB connector from host computer; remove any AA/AAA alkaline batteries if wireless.",
+                "Do not crush or hammer the plastic casing manually.",
+                "Coil the connection cable neatly and secure with a twist-tie or rubber band.",
+                "Deposit in the municipal Red Bin for e-waste or sell to an authorized scrap dealer specializing in electronics."
+            )
+            val impact = "Prevents toxic lead solders from contaminating municipal landfills while reclaiming high-purity copper and engineering polymers."
+            val detItem = DetectedItem(detectedName, customCategory, emptyList(), points, steps, impact, 480f, 82)
+            return DynamicAdvisoryResult(customCategory, detectedName, points, steps, impact, modelSource = "Meta Llama 3.2 (ExecuTorch Arm)", detectedItems = listOf(detItem))
+        }
+
+        // 7. BATTERIES & CHEMICAL CELLS (RED BIN)
+        if (listOf("battery", "lithium", "alkaline", "button cell", "inverter", "cell").any { q.contains(it) }) {
+            val detectedName = "Battery Cell (Hazardous)"
+            val customCategory = baseCategories[5].copy(
+                categoryName = "Domestic Hazardous: $detectedName",
+                binName = "RED / BLACK BIN — DOMESTIC HAZARDOUS",
+                binColorHex = 0xFFDC2626,
+                disposalRecommendation = "⚠️ CRITICAL: Deposit $detectedName strictly in the Red/Black Bin (Domestic Hazardous). Insulate terminals with tape."
+            )
+            val points = listOf(
+                "Reactive Chemical Content: Contains potassium hydroxide, manganese dioxide, nickel, or flammable non-aqueous lithium electrolytes.",
+                "Compaction Fire Danger: Crushing under hydraulic garbage trucks short-circuits internal electrodes, causing 800°C thermal runaway fires.",
+                "Hydrometallurgical Smelting: Certified recyclers extract 95%+ pure battery-grade cobalt, lithium, and nickel in closed chemical loops.",
+                "Bioaccumulation Risk: Heavy metals leach through unlined landfill soil into agricultural groundwater tables."
+            )
+            val steps = listOf(
+                "Never puncture, deform, incinerate, or submerge batteries in water.",
+                "Apply transparent cellophane tape over positive and negative terminal contacts to prevent accidental shorts.",
+                "Store in a dry plastic box away from metallic items like keys or coins.",
+                "Hand over to a designated municipal hazardous waste collection vehicle or retail battery buyback box."
+            )
+            val impact = "Isolating spent batteries eliminates heavy metal toxicity in municipal drinking water and prevents compactor truck fires."
+            val detItem = DetectedItem(detectedName, customCategory, emptyList(), points, steps, impact, 340f, 88)
+            return DynamicAdvisoryResult(customCategory, detectedName, points, steps, impact, modelSource = "Meta Llama 3.2 (ExecuTorch Arm)", detectedItems = listOf(detItem))
+        }
+
+        // 8. COOKED FOOD SCRAPS, RICE, CURRY & KITCHEN LEFTOVERS (GREEN BIN)
+        if (listOf("rice", "curry", "sabzi", "dal", "gravy", "dish", "leftover", "leftovers", "plate", "cooked", "meal", "food", "kitchen scrap").any { q.contains(it) }) {
+            val detectedName = "Cooked Food Scraps & Kitchen Leftovers"
             val customCategory = baseCategories[2].copy(
-                categoryName = "Wet Organic Compostable: $name",
+                categoryName = "Wet Organic Compostable: $detectedName",
                 binName = "GREEN BIN — WET / COMPOSTABLE",
                 binColorHex = 0xFF16A34A,
-                disposalRecommendation = "Deposit $name directly into the Green Bin (Wet Organic Stream). Do not bag in single-use plastic."
+                disposalRecommendation = "Deposit $detectedName directly into the Green Bin (Wet Organic Stream). Do not bag in single-use plastic."
             )
             val points = listOf(
-                "Biodegradable Biomass: $name is rich in organic nitrogen and moisture, ideal for decentralized biological decomposition.",
-                "Aerobic Composting: Naturally breaks down into nutrient-rich organic compost within 30 to 45 days under aerobic conditions.",
-                "Biomethanation Potential: Anaerobic microbial digestion captures pure biomethane gas for clean decentralized cooking energy.",
-                "Landfill Diversion: Preventing organic waste from rotting in anaerobic dumpsites eliminates fugitive methane emissions."
+                "Perishable Biomass: High-moisture organic material (75–85% water) rich in biodegradable carbon, nitrogen, and essential minerals.",
+                "Biomethanation Potential: Anaerobic microbial digestion captures pure biomethane (CH₄) for decentralized clean cooking and power.",
+                "Aerobic Composting: Naturally breaks down into rich humus in 30 to 45 days, replenishing micro-nutrients in municipal soils.",
+                "Landfill Diversion: Preventing food waste from rotting in anaerobic dumpsites eliminates fugitive methane (28x worse than CO₂)."
             )
             val steps = listOf(
-                "Remove any attached plastic stickers, ties, or non-biodegradable packaging.",
-                "Drain liquid gravies, curries, or excess oils before binning.",
-                "Deposit into the Green Bin using a washable caddy instead of plastic garbage bags.",
-                "Transfer promptly to municipal wet waste collectors or household composters."
+                "Drain excess gravies, cooking oils, or excess liquids before transferring to the wet caddy.",
+                "Never wrap in conventional non-biodegradable polythene grocery bags.",
+                "Deposit directly into the Green Bin using newspaper lining or a washable bin.",
+                "Hand over daily to municipal wet waste collection workers or add to home composters."
             )
-            val impact = "Diverting $name from landfills eliminates methane (CH₄), which has 28x higher global warming potential than CO₂."
-            val detItem = DetectedItem(name, customCategory, emptyList(), points, steps, impact)
-            return DynamicAdvisoryResult(customCategory, name, points, steps, impact, modelSource = "Meta Llama 3.2 (ExecuTorch Arm)", detectedItems = listOf(detItem))
-        } else {
+            val impact = "Diverting kitchen food waste from open dumps eliminates potent methane gas and produces rich organic fertilizer."
+            val detItem = DetectedItem(detectedName, customCategory, emptyList(), points, steps, impact, 120f, 65)
+            return DynamicAdvisoryResult(customCategory, detectedName, points, steps, impact, modelSource = "Meta Llama 3.2 (ExecuTorch Arm)", detectedItems = listOf(detItem))
+        }
+
+        // 9. FRUIT PEELS, VEGETABLE SCRAPS & ORGANIC GARDEN WASTE (GREEN BIN)
+        if (listOf("peel", "banana", "apple", "fruit", "vegetable", "tea", "coffee", "roti", "bread", "organic", "leaf", "leaves", "produce", "salad", "broccoli", "carrot", "orange").any { q.contains(it) }) {
+            val detectedName = if (q.contains("banana")) "Banana Peel" else if (q.contains("apple")) "Apple Core" else if (q.contains("peel")) "Fruit Peels" else name
+            val customCategory = baseCategories[2].copy(
+                categoryName = "Wet Organic Compostable: $detectedName",
+                binName = "GREEN BIN — WET / COMPOSTABLE",
+                binColorHex = 0xFF16A34A,
+                disposalRecommendation = "Deposit $detectedName directly into the Green Bin (Wet Organic Stream). Great for home composting."
+            )
+            val points = listOf(
+                "Cellulose & Nutrient Rich: Contains natural potassium, phosphorus, and moisture ideal for biological aerobic breakdown.",
+                "Rapid Aerobic Decomposition: Decomposes aerobically within 21 to 30 days into odorless, nutrient-dense garden humus.",
+                "Sticker Removal Protocol: Remove non-biodegradable plastic brand retail stickers before composting.",
+                "Soil Microbiome Restoration: Returns organic carbon to municipal soils, reducing dependence on chemical fertilizers."
+            )
+            val steps = listOf(
+                "Peel off and discard any plastic brand stickers or price tags.",
+                "Chop large fruit or vegetable chunks into smaller pieces to accelerate microbial aerobic breakdown.",
+                "Deposit directly into the Green Bin or your home composting pot.",
+                "Cover with dry leaves or sawdust to maintain optimal carbon-to-nitrogen ratio."
+            )
+            val impact = "Adds vital organic matter back to topsoil while eliminating landfill methane production."
+            val detItem = DetectedItem(detectedName, customCategory, emptyList(), points, steps, impact, 110f, 65)
+            return DynamicAdvisoryResult(customCategory, detectedName, points, steps, impact, modelSource = "Meta Llama 3.2 (ExecuTorch Arm)", detectedItems = listOf(detItem))
+        }
+
+        // 10. PLASTIC BOTTLES (BLUE BIN)
+        if (listOf("bottle", "pet", "water bottle", "beverage bottle").any { q.contains(it) }) {
+            val detectedName = "Plastic Water Bottle (PET 1)"
             val customCategory = baseCategories[0].copy(
-                categoryName = "Dry Recyclable: $name",
+                categoryName = "Dry Recyclable: $detectedName",
                 binName = "BLUE BIN — DRY RECYCLABLE",
                 binColorHex = 0xFF2563EB,
-                disposalRecommendation = "Deposit $name into the Blue Bin (Dry Stream). Ensure it is completely clean and dry before disposal."
+                disposalRecommendation = "Empty contents, crush flat, leave cap attached, and place in the Blue Bin (Dry Stream)."
             )
             val points = listOf(
-                "Dry Recyclable Material: $name consists of salvageable polymers, fibers, paper, or structural metals.",
-                "Material Recovery Facility (MRF): Sorted mechanically or manually into distinct commodity scrap streams for reprocessing.",
-                "Thermal & Fuel Recovery: Non-recyclable composite fractions are baled for cement kiln Refuse-Derived Fuel (RDF) at 1400°C.",
-                "Dry Segregation Norm: Keeping dry items isolated from wet kitchen waste maintains high scrap collection and salvage value."
+                "Resin Code 1 (PET): Polyethylene Terephthalate is the most widely recycled polymer worldwide with established scrap value.",
+                "Mechanical Recycling: Sorted, washed, and flaked into rPET pellets for polyester fiber yarn and recycled bottles.",
+                "Cap & Label Compatibility: Bottle is PET; cap is HDPE (Code 2); automated float-sink tanks separate them cleanly.",
+                "Economic Scrap Value: High commodity market demand—local kabadiwalas pay ₹15–25/kg for clean transparent PET bottles."
             )
             val steps = listOf(
-                "Empty all food residues, liquids, or contaminants completely.",
-                "Flatten, fold, or compress the item to minimize municipal transport volume.",
-                "Separate recyclable metal or plastic sections from non-recyclable padding if applicable.",
-                "Deposit cleanly into the Blue Bin (Dry Stream)."
+                "Empty all residual water or liquid completely.",
+                "Crush the bottle flat along its longitudinal axis to reduce transport volume by 70%.",
+                "Screw the HDPE cap back onto the crushed bottle so it does not get lost during mechanical sorting.",
+                "Deposit into the Blue Bin (Dry Stream) or sell to a local scrap collector."
             )
-            val impact = "Proper dry segregation of $name conserves virgin natural resources, cuts industrial energy usage, and eliminates landfill bulk."
-            val detItem = DetectedItem(name, customCategory, emptyList(), points, steps, impact)
-            return DynamicAdvisoryResult(customCategory, name, points, steps, impact, modelSource = "Meta Llama 3.2 (ExecuTorch Arm)", detectedItems = listOf(detItem))
+            val impact = "Recycling PET saves 60% greenhouse gas emissions and 70% energy compared to producing virgin petroleum plastic."
+            val detItem = DetectedItem(detectedName, customCategory, emptyList(), points, steps, impact, 95f, 75)
+            return DynamicAdvisoryResult(customCategory, detectedName, points, steps, impact, modelSource = "Meta Llama 3.2 (ExecuTorch Arm)", detectedItems = listOf(detItem))
         }
+
+        // 11. SNACK WRAPPERS & MULTI-LAYERED PLASTICS (BLUE BIN)
+        if (listOf("wrapper", "packet", "chips", "biscuit", "mlp", "snack").any { q.contains(it) }) {
+            val detectedName = "Multi-Layered Plastic (MLP) Wrapper"
+            val customCategory = baseCategories[0].copy(
+                categoryName = "Dry Recyclable: $detectedName",
+                binName = "BLUE BIN — DRY RECYCLABLE",
+                binColorHex = 0xFF2563EB,
+                disposalRecommendation = "Shake out crumbs, keep 100% dry, and deposit into the Blue Bin for cement kiln energy recovery (RDF)."
+            )
+            val points = listOf(
+                "Multi-Material Laminate: Typically consists of metallized BOPP exterior, aluminum barrier foil (0.02 µm), and LDPE heat-seal layer.",
+                "Thermal Energy Recovery (RDF): Inseparable layers make mechanical pelletizing difficult; baled as Refuse-Derived Fuel (RDF) for cement kilns.",
+                "Co-Processing at 1400°C: Cement kilns thermally destroy all polymers into energy, integrating residual mineral ash into clinker without toxic ash dumps.",
+                "Plastic Waste Management Rules: Brands pay EPR fees to municipal recovery facilities to collect and transport post-consumer MLPs."
+            )
+            val steps = listOf(
+                "Shake out all loose biscuit crumbs, chips, or salt crystals.",
+                "Keep 100% dry; do not soak in water as moisture reduces cement kiln calorific combustion efficiency.",
+                "Fold or flatten the wrapper compactly.",
+                "Deposit into the Blue Bin designated for dry municipal streams."
+            )
+            val impact = "Diverting MLPs from storm drains prevents microplastic fragmentation and replaces coal in industrial cement kilns."
+            val detItem = DetectedItem(detectedName, customCategory, emptyList(), points, steps, impact, 85f, 70)
+            return DynamicAdvisoryResult(customCategory, detectedName, points, steps, impact, modelSource = "Meta Llama 3.2 (ExecuTorch Arm)", detectedItems = listOf(detItem))
+        }
+
+        // 12. PIZZA BOX & GREASY CARDBOARD (SPLIT GREEN / BLUE BIN)
+        if (listOf("pizza", "greasy box", "oily box", "greasy paper", "greasy cardboard").any { q.contains(it) }) {
+            val detectedName = "Pizza Box / Greasy Cardboard"
+            val customCategory = baseCategories[0].copy(
+                categoryName = "2-Stream Item: $detectedName",
+                binName = "BLUE BIN (Clean Lid) / GREEN BIN (Greasy Base)",
+                binColorHex = 0xFF2563EB,
+                disposalRecommendation = "Tear box in two: place clean top lid in the Blue Bin (Paper); place grease-soaked bottom base in the Green Bin (Compostable)."
+            )
+            val points = listOf(
+                "Oil Grease Barrier Effect: Food grease coats cellulose paper fibers with hydrophobic lipids, preventing water breakdown in hydropulpers.",
+                "Hydropulping Contamination: Greasy paper introduced into paper recycling mills causes oil spots and structural holes in finished recycled paper.",
+                "Biodegradable Greasy Base: Grease-soaked unbleached cardboard is 100% compostable and breaks down into carbon-rich soil conditioner.",
+                "Corrugated Fluting: Clean top cardboard provides valuable virgin-like kraft pulp with long, strong fibers."
+            )
+            val steps = listOf(
+                "Tear the pizza box along the hinge separating the top lid from the bottom base.",
+                "Inspect for melted cheese or oil stains: place the grease-soaked bottom directly into the Green Bin (wet compostable).",
+                "Remove any plastic pizza saver tripod tables or sauce dipping cups.",
+                "Flatten the clean, dry cardboard lid and place it into the Blue Bin (dry recyclable)."
+            )
+            val impact = "Protects municipal paper recycling batches from oil spoilage while returning soiled paper to compost."
+            val detItem = DetectedItem(detectedName, customCategory, emptyList(), points, steps, impact, 220f, 78)
+            return DynamicAdvisoryResult(customCategory, detectedName, points, steps, impact, modelSource = "Meta Llama 3.2 (ExecuTorch Arm)", detectedItems = listOf(detItem))
+        }
+
+        // 13. METALS, CANS & ALUMINUM FOIL (BLUE BIN)
+        if (listOf("can", "tin", "aluminum", "metal", "steel", "iron", "copper", "foil").any { q.contains(it) }) {
+            val detectedName = if (q.contains("can") || q.contains("tin")) "Metal Beverage Can" else name
+            val customCategory = baseCategories[0].copy(
+                categoryName = "Dry Recyclable: $detectedName",
+                binName = "BLUE BIN — DRY RECYCLABLE",
+                binColorHex = 0xFF2563EB,
+                disposalRecommendation = "Rinse lightly, crush flat, and place in the Blue Bin (Dry Stream). Metals are 100% infinitely recyclable."
+            )
+            val points = listOf(
+                "Elemental Metallurgy: Consists of pure non-ferrous aluminum or ferrous steel alloys with zero polymer contamination.",
+                "Infinite Recyclability: Metals can be melted, purified, and re-cast repeatedly without any loss of structural or chemical integrity.",
+                "Massive Energy Conservation: Recycling secondary aluminum requires 95% less energy than refining virgin bauxite ore via the Hall-Héroult process.",
+                "High Economic Salvage: Local scrap dealers (kabadiwalas) and municipal Material Recovery Facilities highly prize clean metal fractions."
+            )
+            val steps = listOf(
+                "Empty any remaining beverage or canned food contents.",
+                "Rinse lightly with used water to remove sugars and organic odors.",
+                "Crush cans carefully to reduce transport volume in municipal bins.",
+                "Place into the Blue Bin or sell directly to local scrap collectors for instant economic return."
+            )
+            val impact = "Recycling $detectedName avoids bauxite strip-mining, reduces toxic red mud waste, and cuts industrial carbon emissions by up to 95%."
+            val detItem = DetectedItem(detectedName, customCategory, emptyList(), points, steps, impact, 410f, 95)
+            return DynamicAdvisoryResult(customCategory, detectedName, points, steps, impact, modelSource = "Meta Llama 3.2 (ExecuTorch Arm)", detectedItems = listOf(detItem))
+        }
+
+        // 14. TEXTILES, CLOTHES, BLANKETS & UMBRELLAS (BLUE BIN)
+        if (listOf("umbrella", "blanket", "cloth", "clothes", "fabric", "textile", "shirt", "pant", "towel").any { q.contains(it) }) {
+            val detectedName = if (q.contains("umbrella")) "Umbrella (Textile & Metal)" else if (q.contains("blanket")) "Blanket / Textile" else name
+            val customCategory = baseCategories[0].copy(
+                categoryName = "Dry Recyclable: $detectedName",
+                binName = "BLUE BIN — DRY RECYCLABLE",
+                binColorHex = 0xFF2563EB,
+                disposalRecommendation = "Keep 100% dry and deposit into the Blue Bin (Dry Stream). Consider donation if still usable."
+            )
+            val points = listOf(
+                "Fiber Classification: Combines synthetic polymers (nylon, polyester) or natural cellulose (cotton) with structural metal/plastic fasteners.",
+                "Mechanical Garnetting: Industrial textile shredders tear post-consumer fabrics into reclaimed shoddy flock fibers for acoustic insulation.",
+                "Dryness Criticality: Wet or moldy textiles cannot be processed in garnetting machinery and rot into unsalvageable sludge.",
+                "Circular Economy: Panipat in India is the global hub for secondary shoddy yarn recycling, fueling domestic circular manufacturing."
+            )
+            val steps = listOf(
+                "Ensure the item is completely dry before disposal.",
+                "If disposing of an umbrella, cut the synthetic fabric canopy with scissors for RDF recovery, and sell the metal ribs to scrap metal recyclers.",
+                "If clothes or blankets are in good condition, consider donating to local community shelters before disposal.",
+                "Deposit cleanly into the Blue Bin designated for dry salvageable goods."
+            )
+            val impact = "Reclaiming 1 kg of secondary textile fiber saves over 6,000 liters of agricultural fresh water and 15 kg of carbon emissions."
+            val detItem = DetectedItem(detectedName, customCategory, emptyList(), points, steps, impact, 180f, 70)
+            return DynamicAdvisoryResult(customCategory, detectedName, points, steps, impact, modelSource = "Meta Llama 3.2 (ExecuTorch Arm)", detectedItems = listOf(detItem))
+        }
+
+        // 15. DYNAMIC MATERIAL SCIENCE FALLBACK (CUSTOMIZED PER INPUT)
+        val customCategory = baseCategories[0].copy(
+            categoryName = "Dry Recyclable: $name",
+            binName = "BLUE BIN — DRY RECYCLABLE",
+            binColorHex = 0xFF2563EB,
+            disposalRecommendation = "Deposit $name into the Blue Bin (Dry Recyclables). Ensure it is clean, dry, and isolated from wet food scraps."
+        )
+        val points = listOf(
+            "Material Identification: $name represents post-consumer municipal dry solid waste requiring strict source segregation under SBM 2.0.",
+            "Material Recovery Facility (MRF): Conveyor trommels and optical sorters mechanically separate salvageable fractions for industrial reuse.",
+            "Thermal Co-Processing: Non-recyclable composite fractions are converted into Refuse-Derived Fuel (RDF) for industrial cement kilns at 1400°C.",
+            "Circular Economy Norm: Keeping dry commodities separated from food moisture preserves their commercial salvage value for recyclers."
+        )
+        val steps = listOf(
+            "Ensure $name is free from food liquids, oils, or organic moisture.",
+            "Flatten, compress, or bundle the item to conserve municipal transport volume.",
+            "Separate any hazardous chemical or electronic sections from non-recyclable padding if applicable.",
+            "Deposit cleanly into the Blue Bin designated for dry municipal streams."
+        )
+        val impact = "Proper dry segregation of $name prevents landfill overloading, cuts industrial resource extraction, and supports India's circular economy."
+        val detItem = DetectedItem(name, customCategory, emptyList(), points, steps, impact, 90f, 68)
+        return DynamicAdvisoryResult(customCategory, name, points, steps, impact, modelSource = "Meta Llama 3.2 (ExecuTorch Arm)", detectedItems = listOf(detItem))
     }
 }

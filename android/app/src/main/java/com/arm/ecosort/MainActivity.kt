@@ -261,12 +261,20 @@ fun EcoSortApp() {
                 val reply = when {
                     qLower.contains("kabadiwala") || qLower.contains("scrap") || qLower.contains("sell") || qLower.contains("price") ->
                         "E-waste scrap dealers and local kabadiwalas buy discarded electronics, copper wiring, and clean metals! Multi-layered plastic packaging and soiled items are routed to RDF cement kilns."
+                    qLower.contains("charger") || qLower.contains("adapter") || qLower.contains("plug") ->
+                        "For phone chargers and adapters, unplug safely from the electrical outlet. Never pry open the casing. Deposit into the Red/Black Bin (E-Waste) so copper coils and transformer circuits are recovered by authorized dismantlers."
                     qLower.contains("battery") || qLower.contains("cell") || qLower.contains("lithium") ->
                         "Lithium batteries are a severe fire hazard under truck compaction! Tape the exposed contact terminals with cellophane tape and drop them at an authorized e-waste kiosk."
                     qLower.contains("wire") || qLower.contains("cable") || qLower.contains("cord") ->
                         "The connection cable contains high-purity recyclable copper wire. Coil the wire neatly for scrap metal recovery."
                     qLower.contains("clean") || qLower.contains("wash") || qLower.contains("rinse") ->
                         "A quick 5-second rinse with leftover water removes food sugars and oils. Let it dry completely before tossing into the Blue Bin so it does not spoil dry paper recycling."
+                    qLower.contains("how to dispose") || qLower.contains("where to throw") || qLower.contains("which bin") || qLower.contains("disposal") ->
+                        "Under India's Swachh Bharat Mission (SBM 2.0): Electronics, chargers, and batteries go to RED BIN (E-Waste); food leftovers and peels go to GREEN BIN (Wet Compostable); clean plastics, paper, and metals go to BLUE BIN (Dry Recyclable)."
+                    qLower.contains("how is it recycled") || qLower.contains("recycling process") || qLower.contains("what happens") ->
+                        "Recyclable dry items are sorted at Material Recovery Facilities (MRFs) into distinct polymer and metal streams. Electronics undergo hydrometallurgical recovery, and food scraps are converted into compost or biomethane cooking gas."
+                    qLower.contains("reuse") || qLower.contains("upcycle") || qLower.contains("diy") ->
+                        "Before discarding, check if the item can be repurposed: clean plastic bottles can make self-watering planters, cardboard boxes make drawer dividers, and citrus peels can brew natural floor cleaner enzymes!"
                     qLower.contains("umbrella") ->
                         "Disassemble the umbrella: cut the fabric canopy with scissors for RDF recovery, and sell the metal ribs to scrap metal recyclers."
                     qLower.contains("blanket") ->
