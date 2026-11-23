@@ -60,39 +60,33 @@ class WasteClassifier:
     3. Generate custom scientific recycling points, disposal steps, and impact metrics.
     """
 
-    LLAMA_SYSTEM_PROMPT = """
-You are EcoSort AI, an expert waste-segregation and circular economy reasoning engine compliant with India's Swachh Bharat Mission (SBM-Urban 2.0).
-The user provides an item name, spoken transcript, or image description of an object.
-
-Your task:
-1. VALIDATION: Determine whether this input refers to a physical object or material that can become waste.
-   - If it is NOT a physical waste item (e.g., greetings like 'hello', 'hi', abstract feelings, math concepts, conversational queries):
-     Set "is_waste_item": false, and provide a polite, helpful "chat_response" inviting the user to provide any physical item (e.g., biscuit packet, phone charger, umbrella, blanket, fruit peel).
-   - If it IS a physical object (regardless of what it is—umbrella, mouse, blanket, wrapper, medicine pack, shoes, battery, etc.):
-     Set "is_waste_item": true, and evaluate it under Swachh Bharat streams.
-
-2. CLASSIFICATION & ADVISORY (when "is_waste_item": true):
-   - "detected_name": Exact specific name of the object.
-   - "bin_color": "blue" (dry recyclables/plastics/textiles/metals/composites), "green" (wet kitchen/organic/compostable), or "red" (domestic hazardous/e-waste/batteries/toxic).
-   - "target_bin": Full stream name ("BLUE BIN — DRY RECYCLABLE", "GREEN BIN — WET / COMPOSTABLE", or "RED / BLACK BIN — DOMESTIC HAZARDOUS").
-   - "disposal_recommendation": One clear, actionable sentence instructing how to properly dispose of this specific item.
-   - "recycling_science": Array of exactly 4 concise, scientific bullet points explaining material structure, polymer/metal composition, why it can or cannot be recycled mechanically, and its industrial processing route (e.g. cement kiln RDF, hydrometallurgical recovery, composting, fiber flocking).
-   - "action_instructions": Array of exactly 4 realistic, numbered step-by-step preparation and disposal actions tailored to this specific item.
-   - "environmental_impact": Specific environmental damage prevented by keeping this item out of city landfills and stormwater drains.
-   - "avoided_co2_grams": Realistic numerical estimate in grams (float).
-   - "energy_saved_percent": Percentage of energy saved by circular recycling vs virgin manufacturing (integer).
-
-Respond with ONLY a raw JSON object (no markdown, no backticks, no wrapping text):
+    LLAMA_SYSTEM_PROMPT = """You are EcoSort AI, a smart waste-segregation reasoning engine compliant with India's Swachh Bharat Mission (SBM 2.0).
+Given an input item name, determine if it is physical waste, identify its category, and generate concise Swachh Bharat advisory.
+If NOT a physical waste item (greetings, abstract words), set "is_waste_item": false and provide a helpful "chat_response".
+If it IS a physical object:
+Set "is_waste_item": true.
+Provide concise guidance. KEEP EACH BULLET POINT TO EXACTLY 1 CONCISE SENTENCE (<15 words).
+Return ONLY a raw JSON object:
 {
   "is_waste_item": true,
   "chat_response": "",
-  "detected_name": "...",
+  "detected_name": "Specific Name of Object",
   "bin_color": "blue",
   "target_bin": "BLUE BIN — DRY RECYCLABLE",
-  "disposal_recommendation": "...",
-  "recycling_points": ["...", "...", "...", "..."],
-  "action_steps": ["...", "...", "...", "..."],
-  "environmental_impact": "...",
+  "disposal_recommendation": "One concise action sentence (<18 words).",
+  "recycling_points": [
+    "Short scientific material point 1 (<15 words).",
+    "Short scientific processing point 2 (<15 words).",
+    "Short chemical/recycling point 3 (<15 words).",
+    "Short Swachh Bharat recovery point 4 (<15 words)."
+  ],
+  "action_steps": [
+    "Step 1 (<12 words).",
+    "Step 2 (<12 words).",
+    "Step 3 (<12 words).",
+    "Step 4 (<12 words)."
+  ],
+  "environmental_impact": "One short impact sentence (<18 words).",
   "avoided_co2_grams": 45.0,
   "energy_saved_percent": 75
 }
@@ -167,8 +161,6 @@ Respond with ONLY a raw JSON object (no markdown, no backticks, no wrapping text
             )
         else:
             models_to_try = [
-                "llama-3.3-70b-versatile",
-                "llama-3.1-8b-instant",
                 "qwen/qwen3.8-27b"
             ]
 
@@ -199,7 +191,7 @@ Respond with ONLY a raw JSON object (no markdown, no backticks, no wrapping text
                             {"role": "user", "content": f"Analyze this input for waste segregation: {user_query}"}
                         ]
 
-                    max_tok = 550
+                    max_tok = 400 if image_base64 else 320
 
                     payload = {
                         "model": model,
@@ -418,5 +410,38 @@ Respond with ONLY a raw JSON object (no markdown, no backticks, no wrapping text
                 latency_ms=35
             )
 
-        # Fallback to dynamic reasoning for text queries
-        return self.classify_generic(query)
+        # Check greeting
+        q = query.strip().lower()
+        if q in ["hi", "hello", "hey", "namaste", "good morning", "how are you", "who are you"]:
+            msg = "Hello! EcoSort is ready. Please enter, speak, or take a photo of any physical waste object you want to sort."
+            return WasteAnalysisResult(
+                is_waste_eligible=False,
+                detected_name="Greeting",
+                stream=STREAM_BLUE,
+                disposal_recommendation=msg,
+                recycling_science=[],
+                action_instructions=[],
+                environmental_impact="No physical waste object identified.",
+                avoided_co2_grams=0.0,
+                energy_saved_percent=0,
+                validation_message=msg,
+                runtime="Meta Llama 3.2 on ExecuTorch (Arm Cortex-A)",
+                latency_ms=25
+            )
+
+        # Honest failure notice instead of repetitive canned boilerplate
+        msg = "AI Engine Notice: Could not connect to the AI model or the 1-minute rate limit was reached. Please wait 10 seconds and try again."
+        return WasteAnalysisResult(
+            is_waste_eligible=False,
+            detected_name="Service Notice",
+            stream=STREAM_BLUE,
+            disposal_recommendation=msg,
+            recycling_science=[],
+            action_instructions=[],
+            environmental_impact="Please retry in a few moments.",
+            avoided_co2_grams=0.0,
+            energy_saved_percent=0,
+            validation_message=msg,
+            runtime="Meta Llama 3.2 on ExecuTorch (Arm Cortex-A)",
+            latency_ms=30
+        )

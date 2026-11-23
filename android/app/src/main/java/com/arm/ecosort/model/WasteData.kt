@@ -498,8 +498,8 @@ Respond with ONLY a raw JSON object (no markdown, no backticks):
 }
         """.trimIndent()
 
-        // Prioritize Meta Llama models for text queries
-        val textModels = listOf("llama-3.3-70b-versatile", "llama-3.1-8b-instant", "qwen/qwen3.8-27b")
+        // Active model on user's Groq project is qwen/qwen3.8-27b
+        val textModels = listOf("qwen/qwen3.8-27b")
 
         for (modelName in textModels) {
             for (attempt in 1..2) {
