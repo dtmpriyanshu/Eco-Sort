@@ -7,6 +7,11 @@ import android.graphics.Matrix
 import android.media.ExifInterface
 import android.net.Uri
 import android.util.Base64
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.label.ImageLabeling
+import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
+import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -324,7 +329,7 @@ object WasteDataProvider {
         apiKey: String,
         base64Image: String
     ): DynamicAdvisoryResult? = withContext(Dispatchers.IO) {
-        if (apiKey.isBlank()) return@withContext classifyItemOffline("Scanned Waste Item")
+        if (apiKey.isBlank()) return@withContext null
 
         val prompt = """
 You are EcoSort Multimodal AI, an expert multi-object waste-segregation engine for India's Swachh Bharat Mission (SBM-Urban 2.0).
@@ -442,8 +447,8 @@ Respond with ONLY a raw JSON object (no markdown, no backticks):
                 }
             }
         }
-        // 100% Offline Edge Fallback
-        return@withContext classifyItemOffline("Scanned Waste Item")
+        // Offline Edge Fallback
+        return@withContext null
     }
 
     /**
@@ -781,6 +786,105 @@ Respond with ONLY a raw JSON object (no markdown, no backticks):
     }
 
     /**
+     * 100% On-Device ML Kit Image Labeler.
+     * Extracts vision labels directly from camera or gallery bitmap using phone's local Arm NPU/CPU.
+     */
+    suspend fun detectLabelsOnDevice(bitmap: Bitmap): List<Pair<String, Float>> = suspendCoroutine { cont ->
+        try {
+            val image = InputImage.fromBitmap(bitmap, 0)
+            val options = ImageLabelerOptions.Builder()
+                .setConfidenceThreshold(0.35f)
+                .build()
+            val labeler = ImageLabeling.getClient(options)
+            labeler.process(image)
+                .addOnSuccessListener { labels ->
+                    val result = labels.map { it.text to it.confidence }
+                    cont.resume(result)
+                }
+                .addOnFailureListener {
+                    cont.resume(emptyList())
+                }
+        } catch (e: Exception) {
+            cont.resume(emptyList())
+        }
+    }
+
+    /**
+     * On-Device Vision Classifier:
+     * Analyzes detected ML Kit visual labels and maps them to accurate Swachh Bharat categories.
+     * If no physical object is detected with confidence, returns null to prompt the user.
+     */
+    suspend fun classifyBitmapOffline(bitmap: Bitmap, hint: String = ""): DynamicAdvisoryResult? {
+        if (hint.isNotBlank()) {
+            return classifyItemOffline(hint)
+        }
+
+        val labels = detectLabelsOnDevice(bitmap)
+        if (labels.isEmpty()) {
+            return null
+        }
+
+        // 1. Check for E-Waste / Hazardous (Red Bin)
+        val hazardousKeywords = listOf(
+            "phone", "mobile", "electronic", "keyboard", "mouse", "gadget",
+            "technology", "cable", "wire", "battery", "hardware", "circuit", "telephone"
+        )
+        val matchedHazardous = labels.firstOrNull { l -> hazardousKeywords.any { l.first.lowercase().contains(it) } }
+        if (matchedHazardous != null) {
+            val labelLower = matchedHazardous.first.lowercase()
+            val itemName = when {
+                labelLower.contains("phone") || labelLower.contains("telephone") -> "Smartphone / Mobile Phone"
+                labelLower.contains("mouse") -> "Computer Mouse"
+                labelLower.contains("keyboard") -> "Computer Keyboard"
+                labelLower.contains("battery") -> "Battery Cell"
+                labelLower.contains("cable") || labelLower.contains("wire") -> "Copper Cable / Wire"
+                else -> "Electronic Device / E-Waste"
+            }
+            return classifyItemOffline(itemName)
+        }
+
+        // 2. Check for Wet Organic / Food Scrap (Green Bin)
+        val organicKeywords = listOf(
+            "food", "dish", "cuisine", "meal", "rice", "vegetable", "fruit",
+            "produce", "ingredient", "bread", "curry", "salad", "tableware",
+            "plate", "recipe", "plant", "flower", "banana", "apple", "snack"
+        )
+        val matchedOrganic = labels.firstOrNull { l -> organicKeywords.any { l.first.lowercase().contains(it) } }
+        if (matchedOrganic != null) {
+            val labelLower = matchedOrganic.first.lowercase()
+            val itemName = when {
+                labelLower.contains("banana") -> "Banana Peel"
+                labelLower.contains("apple") -> "Apple Core"
+                labelLower.contains("fruit") -> "Fruit Scrap / Peel"
+                labelLower.contains("vegetable") -> "Vegetable Scrap"
+                labelLower.contains("rice") || labelLower.contains("dish") || labelLower.contains("plate") || labelLower.contains("curry") || labelLower.contains("meal") || labelLower.contains("food") -> "Cooked Food Leftovers / Kitchen Scrap"
+                else -> "Kitchen Food Scrap / Organic Waste"
+            }
+            return classifyItemOffline(itemName)
+        }
+
+        // 3. Check for Dry Recyclables (Blue Bin)
+        val dryKeywords = listOf(
+            "bottle", "plastic", "cup", "paper", "cardboard", "box", "can", "tin", "aluminum", "textile"
+        )
+        val matchedDry = labels.firstOrNull { l -> dryKeywords.any { l.first.lowercase().contains(it) } }
+        if (matchedDry != null) {
+            val labelLower = matchedDry.first.lowercase()
+            val itemName = when {
+                labelLower.contains("bottle") -> "Plastic Water Bottle"
+                labelLower.contains("cup") -> "Paper / Plastic Cup"
+                labelLower.contains("box") || labelLower.contains("cardboard") -> "Cardboard Packaging"
+                labelLower.contains("can") || labelLower.contains("tin") -> "Metal Beverage Can"
+                else -> "Dry Recyclable Packaging"
+            }
+            return classifyItemOffline(itemName)
+        }
+
+        // Image contained background labels (e.g., "Room", "Floor", "Hand", "Sky") but no waste object
+        return null
+    }
+
+    /**
      * Dynamic Generalized Reasoning Engine (Zero Hardcoded Items).
      * Analyzes any item dynamically based on physical waste principles
      * without canned item dictionaries.
@@ -788,7 +892,43 @@ Respond with ONLY a raw JSON object (no markdown, no backticks):
     fun classifyItemOffline(userQuery: String = ""): DynamicAdvisoryResult {
         val q = userQuery.lowercase().trim()
 
-        // 1. GREETING CHECK
+        // 1. ABUSE & PROFANITY CHECK
+        val isAbuse = listOf(
+            "fuck", "shit", "bitch", "bastard", "idiot", "stupid", "dumb", "crap",
+            "useless", "nonsense", "rubbish", "shut up", "fuck you", "stfu", "moron", "sucks"
+        ).any { q.contains(it) }
+        if (isAbuse) {
+            return DynamicAdvisoryResult(
+                category = baseCategories[0],
+                detectedName = "Invalid Input",
+                customPoints = emptyList(),
+                customSteps = emptyList(),
+                customImpact = "",
+                isGreeting = true,
+                greetingText = "I understand your frustration! EcoSort is an AI assistant dedicated to physical waste segregation under India's Swachh Bharat Mission (SBM-Urban 2.0). Please name or present a physical waste object (e.g. food scrap, phone, bottle, battery).",
+                modelSource = "ExecuTorch Llama 3.2"
+            )
+        }
+
+        // 2. PLACEHOLDER CHECK
+        val isPlaceholder = listOf(
+            "scanned waste item", "physical waste item", "captured physical waste",
+            "unspecified item", "waste", "item", "trash", "garbage"
+        ).any { q == it }
+        if (isPlaceholder) {
+            return DynamicAdvisoryResult(
+                category = baseCategories[0],
+                detectedName = "Unidentified Object",
+                customPoints = emptyList(),
+                customSteps = emptyList(),
+                customImpact = "",
+                isGreeting = true,
+                greetingText = "Could not clearly identify any waste object in this photo. Please type or tap what item you are holding (e.g., Phone, Mouse, Food scrap, Bottle):",
+                modelSource = "ExecuTorch Llama 3.2"
+            )
+        }
+
+        // 3. GREETING CHECK
         if (q.matches(Regex("^(hi|hello|hey|namaste|good morning|good afternoon|good evening|who are you|how are you|test|ping).*"))) {
             return DynamicAdvisoryResult(
                 category = baseCategories[0],
@@ -806,7 +946,12 @@ Respond with ONLY a raw JSON object (no markdown, no backticks):
 
         // Dynamic material stream classification (No hardcoded items)
         val isHazardous = listOf("battery", "electronic", "wire", "cable", "phone", "mouse", "charger", "bulb", "chemical", "medicine", "toxic", "circuit").any { q.contains(it) }
-        val isOrganic = listOf("peel", "food", "fruit", "vegetable", "tea", "coffee", "roti", "rice", "organic", "leaf", "bread", "greasy", "oily", "apple", "banana").any { q.contains(it) }
+        val isOrganic = listOf(
+            "peel", "food", "fruit", "vegetable", "tea", "coffee", "roti", "rice",
+            "curry", "sabzi", "dal", "gravy", "dish", "leftover", "leftovers", "plate",
+            "cooked", "meal", "organic", "leaf", "leaves", "bread", "greasy", "oily",
+            "apple", "banana", "produce", "salad", "broccoli", "carrot", "orange"
+        ).any { q.contains(it) }
 
         if (isHazardous) {
             val customCategory = baseCategories[5].copy(

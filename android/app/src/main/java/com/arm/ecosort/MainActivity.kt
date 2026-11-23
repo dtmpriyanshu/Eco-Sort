@@ -208,27 +208,17 @@ fun EcoSortApp() {
 
         coroutineScope.launch {
             val startTime = System.currentTimeMillis()
-            val apiKey = WasteDataProvider.groqApiKey
-            val base64Image = WasteDataProvider.bitmapToBase64(bitmap)
-
-            var result: DynamicAdvisoryResult? = null
-            if (apiKey.isNotBlank()) {
-                result = WasteDataProvider.analyzeImageWithLlamaVision(apiKey, base64Image)
-            }
-
             val queryHint = chatQuery.trim()
-            val finalResult = result ?: if (queryHint.isNotBlank()) {
-                WasteDataProvider.classifyItemOffline(queryHint)
-            } else {
-                null
-            }
+
+            // 100% On-Device Edge Vision via Google ML Kit (Zero Cloud, Zero API Keys)
+            val finalResult = WasteDataProvider.classifyBitmapOffline(bitmap, hint = queryHint)
 
             val elapsed = System.currentTimeMillis() - startTime
             isLoading = false
 
             if (finalResult == null) {
                 // STOP AND ASK THE USER: Do not guess or return canned responses!
-                noticeMessage = "Could not clearly identify any waste object in this photo. Please type or tap what item you are holding (e.g., Phone, Mouse, Bottle):"
+                noticeMessage = "Could not clearly identify any waste object in this photo. Please type or tap what item you are holding (e.g., Phone, Mouse, Food scrap, Bottle):"
                 Toast.makeText(context, "Please type or tap the item name to continue", Toast.LENGTH_LONG).show()
             } else if (finalResult.isGreeting) {
                 noticeMessage = finalResult.greetingText
@@ -249,12 +239,25 @@ fun EcoSortApp() {
         isLlamaThinking = true
 
         coroutineScope.launch {
+            val qLower = question.lowercase().trim()
+            val isAbuse = listOf(
+                "fuck", "shit", "bitch", "bastard", "idiot", "stupid", "dumb", "crap",
+                "useless", "nonsense", "rubbish", "shut up", "fuck you", "stfu", "moron", "sucks"
+            ).any { qLower.contains(it) }
+
+            if (isAbuse) {
+                val reply = "I understand your frustration! EcoSort is an AI assistant dedicated solely to physical waste segregation under India's Swachh Bharat Mission (SBM-Urban 2.0). Please ask about a physical waste item or recycling procedure."
+                isLlamaThinking = false
+                conversationHistory = currentHistory + ChatMessage("assistant", reply)
+                return@launch
+            }
+
             val apiKey = WasteDataProvider.groqApiKey
             if (apiKey.isNotBlank()) {
                 val llamaReply = WasteDataProvider.callGroqLlamaChat(apiKey, currentHistory)
+                isLlamaThinking = false
                 conversationHistory = currentHistory + ChatMessage("assistant", llamaReply)
             } else {
-                val qLower = question.lowercase()
                 val reply = when {
                     qLower.contains("kabadiwala") || qLower.contains("scrap") || qLower.contains("sell") || qLower.contains("price") ->
                         "E-waste scrap dealers and local kabadiwalas buy discarded electronics, copper wiring, and clean metals! Multi-layered plastic packaging and soiled items are routed to RDF cement kilns."
@@ -268,12 +271,14 @@ fun EcoSortApp() {
                         "Disassemble the umbrella: cut the fabric canopy with scissors for RDF recovery, and sell the metal ribs to scrap metal recyclers."
                     qLower.contains("blanket") ->
                         "Keep blankets 100% dry! Discarded blankets are mechanically shredded into reclaimed flock fiber for automotive acoustic insulation."
+                    qLower.contains("food") || qLower.contains("rice") || qLower.contains("curry") || qLower.contains("leftover") || qLower.contains("compost") ->
+                        "Cooked food scraps and vegetable trimmings decompose aerobically in 30 to 45 days into organic compost. Never seal in plastic bags before placing in the Green Bin."
                     else ->
                         "Under India's Swachh Bharat Mission (SBM 2.0), keep clean dry recyclables in the Blue Bin, kitchen organic waste in the Green Bin, and hazardous e-waste in the Red Bin."
                 }
+                isLlamaThinking = false
                 conversationHistory = currentHistory + ChatMessage("assistant", reply)
             }
-            isLlamaThinking = false
         }
     }
 

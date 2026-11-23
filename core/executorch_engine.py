@@ -80,6 +80,12 @@ class ExecuTorchLlamaEngine:
         if any(w in q for w in ["burn", "fire"]):
             return "NEVER burn plastics, packaging, or textiles! Open incineration releases toxic dioxins, furans, and heavy particulates that cause respiratory illness and cancer."
 
+        if any(w in item for w in ["physical waste item", "captured physical waste", "unspecified item"]):
+            return (
+                "Under India's Swachh Bharat Mission (SBM-Urban 2.0), waste must be segregated into 3 primary streams: "
+                "Blue Bin for dry recyclables, Green Bin for organic compostables, and Red Bin for domestic hazardous / e-waste."
+            )
+
         return (
             f"Under India's Swachh Bharat Mission (SBM 2.0), ensure '{context_item}' is strictly kept separate: "
             f"Dry clean recyclables in the Blue Bin, organic compostables in the Green Bin, and hazardous e-waste in the Red Bin."

@@ -44,7 +44,13 @@ WASTE_LABEL_MAP = {
     'fork': 'Cutlery (Metal / Plastic)',
     'knife': 'Cutlery (Metal / Plastic)',
     'spoon': 'Cutlery (Metal / Plastic)',
-    'bowl': 'Ceramic / Plastic Bowl'
+    'bowl': 'Ceramic / Plastic Bowl',
+    'broccoli': 'Broccoli / Vegetable Food Scrap',
+    'carrot': 'Carrot / Vegetable Food Scrap',
+    'orange': 'Orange / Citrus Fruit Scrap',
+    'hot dog': 'Food Waste / Cooked Snack',
+    'donut': 'Food Waste / Bakery Scrap',
+    'cake': 'Food Waste / Bakery Scrap'
 }
 
 
@@ -91,7 +97,7 @@ class EdgeVisionDetector:
         else:
             print(f"[EdgeVisionDetector] Model file not found at: {self.model_path}")
 
-    def detect_from_base64(self, base64_str: str, conf_threshold: float = 0.30) -> VisionResult:
+    def detect_from_base64(self, base64_str: str, conf_threshold: float = 0.18) -> VisionResult:
         """
         Decodes a base64 image and performs on-device object detection.
         """
@@ -122,7 +128,7 @@ class EdgeVisionDetector:
                 prompt_message=f"Vision detection error: {str(e)}"
             )
 
-    def detect(self, img: np.ndarray, conf_threshold: float = 0.30) -> VisionResult:
+    def detect(self, img: np.ndarray, conf_threshold: float = 0.18) -> VisionResult:
         """
         Runs local inference on an OpenCV BGR image array.
         """

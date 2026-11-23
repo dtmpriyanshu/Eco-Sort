@@ -72,6 +72,17 @@ class WasteClassifier:
         "democracy", "software", "internet", "cloud", "blockchain", "god", "soul"
     }
 
+    PROFANITY_AND_ABUSE = {
+        "fuck", "fucking", "fucked", "fucker", "f***", "shit", "bitch", "bastard",
+        "asshole", "dick", "pussy", "idiot", "stupid", "dumb", "crap", "useless",
+        "nonsense", "rubbish", "shut up", "fuck you", "stfu", "loser", "moron", "sucks"
+    }
+
+    GENERIC_PLACEHOLDERS = {
+        "physical waste item", "captured physical waste", "scanned physical object",
+        "unidentified waste", "waste", "item", "trash", "garbage", "object", "thing"
+    }
+
     def __init__(self, api_key: Optional[str] = None):
         # Offline mode active; external API key not required
         self.api_key = None
@@ -81,17 +92,25 @@ class WasteClassifier:
     def validate_input(self, text: str) -> Tuple[bool, Optional[str]]:
         """
         Determines whether the input refers to a physical object or material.
-        Rejects conversational greetings or abstract non-waste inquiries.
+        Rejects conversational greetings, profanity/abuse, and abstract non-waste inquiries.
         """
         cleaned = text.strip().lower()
         if not cleaned:
             return False, "Please enter, speak, or take a photo of any physical waste object."
 
-        if cleaned in self.GREETINGS:
+        # Check for profanity or abusive slang
+        words = set(re.findall(r'\b[a-z0-9_*]+\b', cleaned))
+        if any(bad in cleaned for bad in self.PROFANITY_AND_ABUSE) or any(w in self.PROFANITY_AND_ABUSE for w in words):
+            return False, "I understand your frustration! EcoSort-Arm is an environmental AI assistant dedicated to physical waste segregation under India's Swachh Bharat Mission (SBM-Urban 2.0). Please name or present a physical waste item (e.g. phone, mouse, bottle, food scrap)."
+
+        if cleaned in self.GREETINGS or any(cleaned.startswith(g) for g in ["hi", "hello", "hey", "namaste"]):
             return False, "Hello! EcoSort-Arm is ready. Please name, speak, or capture any physical waste item for Swachh Bharat segregation guidance."
 
         if cleaned in self.ABSTRACT_CONCEPTS or len(cleaned) < 2:
             return False, f"'{text}' appears to be an abstract concept or non-physical input. EcoSort guides the segregation of physical municipal waste."
+
+        if cleaned in self.GENERIC_PLACEHOLDERS:
+            return False, "Please specify or select what physical item you are holding (e.g., Phone, Mouse, Plastic Bottle, Food scrap) to view its Swachh Bharat bin stream."
 
         return True, None
 
@@ -251,8 +270,17 @@ class WasteClassifier:
             )
 
         # --- 2. WET ORGANIC & COMPOSTABLE (GREEN BIN) ---
-        if any(w in q for w in ["peel", "banana", "apple", "fruit", "vegetable", "food", "tea", "coffee", "roti", "rice", "dal", "bread", "organic", "leaf", "leaves", "flower", "eggshell", "bone", "meat", "coconut shell"]):
-            name = "Kitchen Food Scrap / Organic Waste" if q in ["food", "organic", "peel"] else title_name
+        if any(w in q for w in ["peel", "banana", "apple", "fruit", "vegetable", "food", "tea", "coffee", "roti", "rice", "dal", "bread", "organic", "leaf", "leaves", "flower", "eggshell", "bone", "meat", "coconut shell", "curry", "cooked", "leftover", "leftovers", "plate", "meal", "sabzi", "gravy", "dish", "produce", "broccoli", "carrot", "orange", "sandwich", "snack", "salad", "pizza"]):
+            if any(w in q for w in ["rice", "dal", "roti", "curry", "sabzi", "leftover", "leftovers", "cooked", "plate", "meal", "dish"]):
+                name = "Cooked Food Scraps & Kitchen Leftovers"
+            elif any(w in q for w in ["peel", "banana", "apple", "fruit", "orange"]):
+                name = "Fruit Peels & Fruit Waste"
+            elif any(w in q for w in ["vegetable", "broccoli", "carrot", "salad"]):
+                name = "Vegetable Trimmings & Kitchen Waste"
+            elif q in ["food", "organic", "wet"]:
+                name = "Kitchen Food Scrap / Organic Waste"
+            else:
+                name = title_name
             return WasteAnalysisResult(
                 is_waste_eligible=True,
                 detected_name=name,
@@ -433,30 +461,21 @@ class WasteClassifier:
                 latency_ms=16
             )
 
-        # --- 4. GENERAL DRY RECYCLABLE DEFAULT (BLUE BIN) ---
-        if q in ["physical waste item", "captured physical waste", "scanned physical object", "unidentified waste"]:
+        # --- 4. GENERAL PLACEHOLDER REJECTION ---
+        if q in self.GENERIC_PLACEHOLDERS:
             return WasteAnalysisResult(
-                is_waste_eligible=True,
-                detected_name="Physical Waste Item (General)",
+                is_waste_eligible=False,
+                detected_name="Unspecified Item",
                 stream=STREAM_BLUE,
-                disposal_recommendation="For accurate Swachh Bharat sorting: Blue Bin for dry plastics/paper, Green Bin for food, and Red Bin for electronics/phones. Type or tag your item name for customized guidance.",
-                recycling_science=[
-                    "Swachh Bharat 3-Way Segregation: India's municipal framework requires strict separation at source to prevent landfill contamination.",
-                    "Blue Stream (Dry Recyclable): Clean packaging, rigid plastics, paper, cardboard, textiles, and metals.",
-                    "Green Stream (Wet Compostable): Biodegradable kitchen food scraps, vegetable peels, and garden waste.",
-                    "Red Stream (Domestic Hazardous/E-Waste): Mobile phones, electronics, lithium batteries, chargers, and CFL bulbs."
-                ],
-                action_instructions=[
-                    "Inspect the physical object: Determine if it is dry recyclable, wet compostable, or hazardous/electronic.",
-                    "If the item is a smartphone, battery, or computer peripheral, place it strictly in the Red Bin (E-Waste).",
-                    "If the item is clean plastic or paper packaging, deposit into the Blue Bin.",
-                    "Type or tap your specific item name (e.g., 'phone', 'mouse', 'bottle') in the search bar for customized scientific guidance."
-                ],
-                environmental_impact="Source segregation at home prevents over 90% of household waste from ending up in open dumpsites.",
-                avoided_co2_grams=80.0,
-                energy_saved_percent=65,
+                disposal_recommendation="Please specify or select what physical item you are holding (e.g., Phone, Mouse, Plastic Bottle, Leftover Food) to view its Swachh Bharat bin stream.",
+                recycling_science=[],
+                action_instructions=[],
+                environmental_impact="Waiting for user to specify item.",
+                avoided_co2_grams=0.0,
+                energy_saved_percent=0,
+                validation_message="Please specify your item name.",
                 runtime="Meta Llama 3.2 on ExecuTorch (Arm Cortex-A)",
-                latency_ms=18
+                latency_ms=16
             )
 
         return WasteAnalysisResult(
@@ -490,6 +509,16 @@ class WasteClassifier:
         """
         q = user_question.lower().strip()
         item = context_item.lower().strip()
+
+        # Check for profanity or abuse in the follow-up question
+        words = set(re.findall(r'\b[a-z0-9_*]+\b', q))
+        if any(bad in q for bad in self.PROFANITY_AND_ABUSE) or any(w in self.PROFANITY_AND_ABUSE for w in words):
+            return "I understand your frustration! EcoSort is an AI assistant dedicated solely to physical waste segregation under India's Swachh Bharat Mission (SBM-Urban 2.0). Please ask about a physical waste item or recycling procedure (e.g., 'Can I sell this to kabadiwala?', 'Is burning safe?')."
+
+        # Check if context_item itself was profanity or a placeholder
+        item_words = set(re.findall(r'\b[a-z0-9_*]+\b', item))
+        if any(bad in item for bad in self.PROFANITY_AND_ABUSE) or any(w in self.PROFANITY_AND_ABUSE for w in item_words) or item in self.GENERIC_PLACEHOLDERS:
+            return "Please provide or scan a physical waste object first (e.g., Plastic Bottle, Banana Peel, Mobile Phone) to discuss its recycling and disposal steps."
 
         # Scrap dealer / kabadiwala questions
         if any(w in q for w in ["kabadiwala", "scrap", "sell", "money", "price", "raddi", "buy", "worth"]):

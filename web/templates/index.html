@@ -153,6 +153,7 @@
             <button type="button" onclick="setCameraHint('Banana Peel')" class="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-800 px-2.5 py-1 rounded-lg font-medium transition-colors">🍌 Food Peel</button>
             <button type="button" onclick="setCameraHint('Pizza Box')" class="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-800 px-2.5 py-1 rounded-lg font-medium transition-colors">🍕 Pizza Box</button>
             <button type="button" onclick="setCameraHint('Biscuit Wrapper')" class="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-800 px-2.5 py-1 rounded-lg font-medium transition-colors">🍪 Wrapper</button>
+            <button type="button" onclick="setCameraHint('Cooked Food / Leftover Kitchen Scrap')" class="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-800 px-2.5 py-1 rounded-lg font-medium transition-colors">🍲 Food Scrap</button>
           </div>
         </div>
 
@@ -449,7 +450,7 @@
 
       let w = video.videoWidth;
       let h = video.videoHeight;
-      const maxDim = 360;
+      const maxDim = 640;
       if (w > maxDim || h > maxDim) {
         if (w > h) {
           h = Math.round((h * maxDim) / w);
@@ -465,9 +466,9 @@
       const ctx = canvas.getContext('2d');
       ctx.drawImage(video, 0, 0, w, h);
 
-      const base64Data = canvas.toDataURL('image/jpeg', 0.65);
+      const base64Data = canvas.toDataURL('image/jpeg', 0.85);
       const hint = (document.getElementById('cameraItemHint')?.value || '').trim() || document.getElementById('queryInput').value.trim();
-      const label = hint || "Captured Physical Waste";
+      const label = hint || "Webcam Snapshot";
       closeWebcam();
 
       // Show preview & analyze
@@ -485,7 +486,7 @@
         img.onload = () => {
           let w = img.width;
           let h = img.height;
-          const maxDim = 360;
+          const maxDim = 640;
           if (w > maxDim || h > maxDim) {
             if (w > h) {
               h = Math.round((h * maxDim) / w);
@@ -500,7 +501,7 @@
           canvas.height = h;
           const ctx = canvas.getContext('2d');
           ctx.drawImage(img, 0, 0, w, h);
-          const base64Data = canvas.toDataURL('image/jpeg', 0.65);
+          const base64Data = canvas.toDataURL('image/jpeg', 0.85);
           showScannedImagePreview(base64Data, file.name);
           analyzePhotoData(base64Data, file.name);
         };
@@ -525,8 +526,8 @@
       if (!queryText && label) {
         queryText = label.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
       }
-      if (!queryText || queryText.toLowerCase() === "webcam snapshot" || queryText.toLowerCase() === "captured physical waste") {
-        queryText = "Physical Waste Item";
+      if (!queryText || queryText.toLowerCase() === "webcam snapshot" || queryText.toLowerCase() === "captured physical waste" || queryText.toLowerCase() === "physical waste item") {
+        queryText = "";
       }
 
       try {
