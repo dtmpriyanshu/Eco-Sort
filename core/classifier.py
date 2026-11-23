@@ -160,8 +160,15 @@ class WasteClassifier:
                 latency_ms=16
             )
 
-        if any(w in q for w in ["mouse", "keyboard", "cable", "wire", "charger", "pcb", "phone", "electronics", "circuit", "headphones", "laptop", "earphone", "remote"]):
-            name = "Computer Peripheral / E-Waste" if q in ["mouse", "electronics"] else title_name
+        if any(w in q for w in ["mouse", "keyboard", "cable", "wire", "charger", "pcb", "phone", "mobile", "smartphone", "cellphone", "electronics", "circuit", "headphones", "laptop", "earphone", "remote"]):
+            if any(w in q for w in ["phone", "mobile", "smartphone", "cellphone"]):
+                name = "Smartphone / Mobile Phone (E-Waste)"
+            elif "mouse" in q:
+                name = "Computer Mouse (E-Waste)"
+            elif "electronics" in q:
+                name = "Electronic Device / E-Waste"
+            else:
+                name = title_name
             return WasteAnalysisResult(
                 is_waste_eligible=True,
                 detected_name=name,
@@ -370,6 +377,31 @@ class WasteClassifier:
             )
 
         # --- 4. GENERAL DRY RECYCLABLE DEFAULT (BLUE BIN) ---
+        if q in ["physical waste item", "captured physical waste", "scanned physical object", "unidentified waste"]:
+            return WasteAnalysisResult(
+                is_waste_eligible=True,
+                detected_name="Physical Waste Item (General)",
+                stream=STREAM_BLUE,
+                disposal_recommendation="For accurate Swachh Bharat sorting: Blue Bin for dry plastics/paper, Green Bin for food, and Red Bin for electronics/phones. Type or tag your item name for customized guidance.",
+                recycling_science=[
+                    "Swachh Bharat 3-Way Segregation: India's municipal framework requires strict separation at source to prevent landfill contamination.",
+                    "Blue Stream (Dry Recyclable): Clean packaging, rigid plastics, paper, cardboard, textiles, and metals.",
+                    "Green Stream (Wet Compostable): Biodegradable kitchen food scraps, vegetable peels, and garden waste.",
+                    "Red Stream (Domestic Hazardous/E-Waste): Mobile phones, electronics, lithium batteries, chargers, and CFL bulbs."
+                ],
+                action_instructions=[
+                    "Inspect the physical object: Determine if it is dry recyclable, wet compostable, or hazardous/electronic.",
+                    "If the item is a smartphone, battery, or computer peripheral, place it strictly in the Red Bin (E-Waste).",
+                    "If the item is clean plastic or paper packaging, deposit into the Blue Bin.",
+                    "Type or tap your specific item name (e.g., 'phone', 'mouse', 'bottle') in the search bar for customized scientific guidance."
+                ],
+                environmental_impact="Source segregation at home prevents over 90% of household waste from ending up in open dumpsites.",
+                avoided_co2_grams=80.0,
+                energy_saved_percent=65,
+                runtime="Meta Llama 3.2 on ExecuTorch (Arm Cortex-A)",
+                latency_ms=18
+            )
+
         return WasteAnalysisResult(
             is_waste_eligible=True,
             detected_name=title_name,

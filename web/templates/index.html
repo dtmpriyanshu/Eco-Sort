@@ -95,6 +95,7 @@
 
       <!-- QUICK SAMPLE PILLS -->
       <div class="flex items-center gap-2 overflow-x-auto no-scrollbar pt-4 text-xs font-semibold">
+        <button onclick="quickQuery('smartphone')" class="bg-white/10 hover:bg-white/20 text-white px-3.5 py-1.5 rounded-full whitespace-nowrap transition-colors">📱 Mobile Phone</button>
         <button onclick="quickQuery('computer mouse')" class="bg-white/10 hover:bg-white/20 text-white px-3.5 py-1.5 rounded-full whitespace-nowrap transition-colors">🖱️ Computer Mouse</button>
         <button onclick="quickQuery('biscuit wrapper')" class="bg-white/10 hover:bg-white/20 text-white px-3.5 py-1.5 rounded-full whitespace-nowrap transition-colors">🍪 MLP Wrapper</button>
         <button onclick="quickQuery('umbrella')" class="bg-white/10 hover:bg-white/20 text-white px-3.5 py-1.5 rounded-full whitespace-nowrap transition-colors">☂️ Umbrella</button>
@@ -136,6 +137,23 @@
         <div class="flex items-center justify-between text-xs text-slate-500 px-1">
           <span class="flex items-center gap-1.5 font-medium"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>Live Video Feed</span>
           <span>Hold object clearly in front of camera</span>
+        </div>
+
+        <!-- CAMERA ITEM HINT / QUICK TAGS -->
+        <div class="space-y-1.5 pt-2 border-t border-borderSubtle">
+          <div class="flex items-center justify-between">
+            <label class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Item Tag / Name (Optional):</label>
+            <span class="text-[10px] text-caramel font-semibold">Tap to auto-fill</span>
+          </div>
+          <input id="cameraItemHint" type="text" placeholder="e.g. Phone, Mouse, Bottle, Banana, Wrapper..." class="w-full bg-cream border border-borderSubtle rounded-xl px-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-caramel font-medium">
+          <div class="flex flex-wrap gap-1.5 pt-0.5">
+            <button type="button" onclick="setCameraHint('Old Smartphone / Mobile Phone')" class="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-800 px-2.5 py-1 rounded-lg font-medium transition-colors">📱 Phone</button>
+            <button type="button" onclick="setCameraHint('Computer Mouse')" class="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-800 px-2.5 py-1 rounded-lg font-medium transition-colors">🖱️ Mouse</button>
+            <button type="button" onclick="setCameraHint('Plastic Water Bottle')" class="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-800 px-2.5 py-1 rounded-lg font-medium transition-colors">🥤 Bottle</button>
+            <button type="button" onclick="setCameraHint('Banana Peel')" class="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-800 px-2.5 py-1 rounded-lg font-medium transition-colors">🍌 Food Peel</button>
+            <button type="button" onclick="setCameraHint('Pizza Box')" class="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-800 px-2.5 py-1 rounded-lg font-medium transition-colors">🍕 Pizza Box</button>
+            <button type="button" onclick="setCameraHint('Biscuit Wrapper')" class="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-800 px-2.5 py-1 rounded-lg font-medium transition-colors">🍪 Wrapper</button>
+          </div>
         </div>
 
         <div class="pt-2 flex gap-2">
@@ -384,10 +402,19 @@
       handleSearch();
     }
 
+    function setCameraHint(text) {
+      const el = document.getElementById('cameraItemHint');
+      if (el) el.value = text;
+    }
+
     // --- WEBCAM STREAM CONTROLS ---
     async function openWebcam() {
       const modal = document.getElementById('webcamModal');
       modal.classList.remove('hidden');
+      const hintInput = document.getElementById('cameraItemHint');
+      if (hintInput) {
+        hintInput.value = document.getElementById('queryInput').value.trim();
+      }
       const video = document.getElementById('webcamFeed');
       const loading = document.getElementById('webcamLoading');
       loading.classList.remove('hidden');
@@ -439,11 +466,13 @@
       ctx.drawImage(video, 0, 0, w, h);
 
       const base64Data = canvas.toDataURL('image/jpeg', 0.65);
+      const hint = (document.getElementById('cameraItemHint')?.value || '').trim() || document.getElementById('queryInput').value.trim();
+      const label = hint || "Captured Physical Waste";
       closeWebcam();
 
       // Show preview & analyze
-      showScannedImagePreview(base64Data, "Webcam Snapshot");
-      analyzePhotoData(base64Data, "Webcam Snapshot");
+      showScannedImagePreview(base64Data, label);
+      analyzePhotoData(base64Data, label);
     }
 
     function handleImageUpload(evt) {
@@ -492,11 +521,11 @@
     async function analyzePhotoData(base64Data, label) {
       showLoading("Inspecting physical object with Meta Llama 3.2 Vision on Arm SoC...");
       const searchBoxText = document.getElementById('queryInput').value.trim();
-      let queryText = searchBoxText;
+      let queryText = (label && label !== "Webcam Snapshot" && label !== "Captured Physical Waste") ? label : searchBoxText;
       if (!queryText && label) {
         queryText = label.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
       }
-      if (!queryText || queryText.toLowerCase() === "webcam snapshot") {
+      if (!queryText || queryText.toLowerCase() === "webcam snapshot" || queryText.toLowerCase() === "captured physical waste") {
         queryText = "Physical Waste Item";
       }
 
