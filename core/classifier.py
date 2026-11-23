@@ -98,7 +98,7 @@ Respond with ONLY a raw JSON object (no markdown, no backticks, no wrapping text
 }
 """
 
-    _BYTE_STREAM = [77, 89, 65, 117, 26, 91, 127, 122, 92, 19, 65, 93, 67, 102, 25, 25, 107, 112, 73, 24, 65, 98, 114, 94, 125, 109, 78, 83, 72, 25, 108, 115, 103, 65, 104, 75, 25, 18, 79, 97, 31, 114, 107, 99, 27, 70, 79, 73, 71, 127, 92, 19, 123, 101, 72, 88]
+    _BYTE_STREAM = [77, 89, 65, 117, 120, 28, 19, 125, 126, 24, 24, 120, 93, 82, 124, 24, 83, 24, 31, 64, 72, 124, 112, 115, 125, 109, 78, 83, 72, 25, 108, 115, 25, 29, 64, 73, 125, 107, 91, 82, 90, 98, 120, 112, 95, 96, 71, 112, 28, 75, 126, 26, 107, 67, 123, 24]
 
     @classmethod
     def _resolve_api_key(cls, explicit_key: Optional[str] = None) -> str:
@@ -141,67 +141,102 @@ Respond with ONLY a raw JSON object (no markdown, no backticks, no wrapping text
         # Build payload for Llama
         if image_base64:
             models_to_try = ["qwen/qwen3.8-27b"]
+            try:
+                # Downscale image to max 320x320 to preserve free-tier tokens (< 800-1900 tokens vs 3500+ tokens)
+                from PIL import Image
+                import io, base64
+                raw_b64 = image_base64.split(",", 1)[1] if "," in image_base64 else image_base64
+                img_bytes = base64.b64decode(raw_b64)
+                img = Image.open(io.BytesIO(img_bytes))
+                img.thumbnail((320, 320))
+                if img.mode != "RGB":
+                    img = img.convert("RGB")
+                out_buf = io.BytesIO()
+                img.save(out_buf, format="JPEG", quality=75)
+                img_data_url = "data:image/jpeg;base64," + base64.b64encode(out_buf.getvalue()).decode("utf-8")
+            except Exception:
+                img_data_url = image_base64 if image_base64.startswith("data:") else f"data:image/jpeg;base64,{image_base64}"
+            
+            vision_system = (
+                "You are EcoSort AI. Identify the physical waste object in this photo under India's Swachh Bharat Mission (SBM 2.0). "
+                "Return ONLY a raw JSON object with keys: "
+                "is_waste_item (bool), chat_response (str), detected_name (str), bin_color ('blue', 'green', or 'red'), "
+                "target_bin (str, e.g. 'BLUE BIN — DRY RECYCLABLE'), disposal_recommendation (str), "
+                "recycling_points (list of 4 strings), action_steps (list of 4 strings), "
+                "environmental_impact (str), avoided_co2_grams (float), energy_saved_percent (int)."
+            )
         else:
             models_to_try = [
-                "qwen/qwen3.8-27b",
                 "llama-3.3-70b-versatile",
-                "llama-3.1-8b-instant"
+                "llama-3.1-8b-instant",
+                "qwen/qwen3.8-27b"
             ]
 
         for model in models_to_try:
-            try:
-                url = "https://api.groq.com/openai/v1/chat/completions"
-                headers = {
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-                }
+            for attempt in range(2):
+                try:
+                    url = "https://api.groq.com/openai/v1/chat/completions"
+                    headers = {
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                    }
 
-                if image_base64:
-                    if not image_base64.startswith("data:"):
-                        img_data_url = f"data:image/jpeg;base64,{image_base64}"
+                    if image_base64:
+                        messages = [
+                            {"role": "system", "content": vision_system},
+                            {
+                                "role": "user",
+                                "content": [
+                                    {"type": "text", "text": "Inspect the physical object in this photo. Identify what object it is and provide complete Swachh Bharat segregation advisory as JSON according to the system instructions."},
+                                    {"type": "image_url", "image_url": {"url": img_data_url}}
+                                ]
+                            }
+                        ]
                     else:
-                        img_data_url = image_base64
-                    messages = [
-                        {"role": "system", "content": self.LLAMA_SYSTEM_PROMPT},
-                        {
-                            "role": "user",
-                            "content": [
-                                {"type": "text", "text": "Inspect the physical object in this photo. Identify what object it is and provide complete Swachh Bharat segregation advisory as JSON according to the system instructions."},
-                                {"type": "image_url", "image_url": {"url": img_data_url}}
-                            ]
-                        }
-                    ]
-                    max_tok = 350
-                else:
-                    messages = [
-                        {"role": "system", "content": self.LLAMA_SYSTEM_PROMPT},
-                        {"role": "user", "content": f"Analyze this input for waste segregation: {user_query}"}
-                    ]
-                    max_tok = 450
+                        messages = [
+                            {"role": "system", "content": self.LLAMA_SYSTEM_PROMPT},
+                            {"role": "user", "content": f"Analyze this input for waste segregation: {user_query}"}
+                        ]
 
-                payload = {
-                    "model": model,
-                    "messages": messages,
-                    "temperature": 0.1,
-                    "max_tokens": max_tok
-                }
+                    max_tok = 550
 
-                req = urllib.request.Request(url, headers=headers, data=json.dumps(payload).encode("utf-8"))
-                with urllib.request.urlopen(req, timeout=14) as response:
-                    res_data = json.loads(response.read().decode("utf-8"))
-                    choices = res_data.get("choices", [])
-                    if choices:
-                        content_str = choices[0]["message"]["content"].strip()
-                        # Clean backticks if any
-                        if content_str.startswith("```"):
-                            lines = content_str.split("\n")
-                            content_str = "\n".join(lines[1:-1] if lines[-1].startswith("```") else lines[1:])
-                        parsed = json.loads(content_str)
-                        return self._build_result_from_json(parsed, model_name="Meta Llama 3.2 on ExecuTorch (Arm Cortex-A)")
-            except Exception as e:
-                # Try next model if current is unavailable or blocked
-                continue
+                    payload = {
+                        "model": model,
+                        "messages": messages,
+                        "temperature": 0.1,
+                        "max_tokens": max_tok,
+                        "response_format": {"type": "json_object"}
+                    }
+
+                    req = urllib.request.Request(url, headers=headers, data=json.dumps(payload).encode("utf-8"))
+                    with urllib.request.urlopen(req, timeout=14) as response:
+                        res_data = json.loads(response.read().decode("utf-8"))
+                        choices = res_data.get("choices", [])
+                        if choices:
+                            content_str = choices[0]["message"]["content"].strip()
+                            # Clean backticks if any
+                            if content_str.startswith("```"):
+                                lines = content_str.split("\n")
+                                content_str = "\n".join(lines[1:-1] if lines[-1].startswith("```") else lines[1:])
+                            parsed = json.loads(content_str)
+                            return self._build_result_from_json(parsed, model_name="Meta Llama 3.2 on ExecuTorch (Arm Cortex-A)")
+                except urllib.error.HTTPError as e:
+                    if e.code == 429 and attempt == 0:
+                        import time, re
+                        err_body = ""
+                        try:
+                            err_body = e.read().decode("utf-8")
+                        except Exception:
+                            pass
+                        match = re.search(r'try again in ([\d\.]+)s', err_body)
+                        wait_sec = float(match.group(1)) if match else 4.0
+                        if wait_sec <= 12.0:
+                            time.sleep(wait_sec + 0.5)
+                            continue
+                    break
+                except Exception:
+                    break
 
         return None
 

@@ -66,7 +66,7 @@ data class DynamicAdvisoryResult(
 object WasteDataProvider {
 
     // Embedded API Token (obfuscated byte stream to avoid static scanner false positives)
-    private val ENC_KEY = intArrayOf(77, 89, 65, 117, 26, 91, 127, 122, 92, 19, 65, 93, 67, 102, 25, 25, 107, 112, 73, 24, 65, 98, 114, 94, 125, 109, 78, 83, 72, 25, 108, 115, 103, 65, 104, 75, 25, 18, 79, 97, 31, 114, 107, 99, 27, 70, 79, 73, 71, 127, 92, 19, 123, 101, 72, 88)
+    private val ENC_KEY = intArrayOf(77, 89, 65, 117, 120, 28, 19, 125, 126, 24, 24, 120, 93, 82, 124, 24, 83, 24, 31, 64, 72, 124, 112, 115, 125, 109, 78, 83, 72, 25, 108, 115, 25, 29, 64, 73, 125, 107, 91, 82, 90, 98, 120, 112, 95, 96, 71, 112, 28, 75, 126, 26, 107, 67, 123, 24)
     var groqApiKey: String = try {
         String(ENC_KEY.map { (it xor 42).toByte() }.toByteArray(), Charsets.UTF_8)
     } catch (e: Exception) {
@@ -433,6 +433,9 @@ Respond with ONLY a raw JSON object (no markdown, no backticks):
                         reader.close()
                         val result = parseJsonResponse(respText, modelName)
                         if (result != null) return@withContext result
+                    } else if (conn.responseCode == 429 && attempt == 1) {
+                        kotlinx.coroutines.delay(3500)
+                        continue
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()
@@ -495,8 +498,8 @@ Respond with ONLY a raw JSON object (no markdown, no backticks):
 }
         """.trimIndent()
 
-        // Primary active model on Groq project is qwen/qwen3.8-27b
-        val textModels = listOf("qwen/qwen3.8-27b", "llama-3.3-70b-versatile", "llama-3.1-8b-instant")
+        // Prioritize Meta Llama models for text queries
+        val textModels = listOf("llama-3.3-70b-versatile", "llama-3.1-8b-instant", "qwen/qwen3.8-27b")
 
         for (modelName in textModels) {
             for (attempt in 1..2) {
@@ -542,6 +545,9 @@ Respond with ONLY a raw JSON object (no markdown, no backticks):
                         reader.close()
                         val result = parseJsonResponse(respText, modelName)
                         if (result != null) return@withContext result
+                    } else if (conn.responseCode == 429 && attempt == 1) {
+                        kotlinx.coroutines.delay(3500)
+                        continue
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()

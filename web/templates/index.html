@@ -422,7 +422,7 @@
 
       let w = video.videoWidth;
       let h = video.videoHeight;
-      const maxDim = 480;
+      const maxDim = 360;
       if (w > maxDim || h > maxDim) {
         if (w > h) {
           h = Math.round((h * maxDim) / w);
@@ -438,7 +438,7 @@
       const ctx = canvas.getContext('2d');
       ctx.drawImage(video, 0, 0, w, h);
 
-      const base64Data = canvas.toDataURL('image/jpeg', 0.7);
+      const base64Data = canvas.toDataURL('image/jpeg', 0.65);
       closeWebcam();
 
       // Show preview & analyze
@@ -456,10 +456,10 @@
         img.onload = () => {
           let w = img.width;
           let h = img.height;
-          const maxDim = 480;
+          const maxDim = 360;
           if (w > maxDim || h > maxDim) {
             if (w > h) {
-              h = Math.round((h * maxDim) / w);
+              h = Math.round((w * maxDim) / h > maxDim ? (h * maxDim) / w : (h * maxDim) / w);
               w = maxDim;
             } else {
               w = Math.round((w * maxDim) / h);
@@ -471,7 +471,7 @@
           canvas.height = h;
           const ctx = canvas.getContext('2d');
           ctx.drawImage(img, 0, 0, w, h);
-          const base64Data = canvas.toDataURL('image/jpeg', 0.7);
+          const base64Data = canvas.toDataURL('image/jpeg', 0.65);
           showScannedImagePreview(base64Data, file.name);
           analyzePhotoData(base64Data);
         };
