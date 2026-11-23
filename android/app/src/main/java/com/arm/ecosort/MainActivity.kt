@@ -240,7 +240,7 @@ fun EcoSortApp() {
                 val qLower = question.lowercase()
                 val reply = when {
                     qLower.contains("kabadiwala") || qLower.contains("scrap") || qLower.contains("sell") || qLower.contains("price") ->
-                        "Local scrap dealers (kabadiwalas) eagerly purchase clean metals, copper cables, and rigid PET bottles! However, multi-layered plastic wrappers and contaminated items are routed to RDF cement kilns."
+                        "E-waste scrap dealers and local kabadiwalas buy discarded electronics, copper wiring, and clean metals! Multi-layered plastic packaging and soiled items are routed to RDF cement kilns."
                     qLower.contains("battery") || qLower.contains("cell") || qLower.contains("lithium") ->
                         "Lithium batteries are a severe fire hazard under truck compaction! Tape the exposed contact terminals with cellophane tape and drop them at an authorized e-waste kiosk."
                     qLower.contains("wire") || qLower.contains("cable") || qLower.contains("cord") ->

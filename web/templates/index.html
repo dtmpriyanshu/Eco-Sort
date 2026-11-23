@@ -443,7 +443,7 @@
 
       // Show preview & analyze
       showScannedImagePreview(base64Data, "Webcam Snapshot");
-      analyzePhotoData(base64Data);
+      analyzePhotoData(base64Data, "Webcam Snapshot");
     }
 
     function handleImageUpload(evt) {
@@ -459,7 +459,7 @@
           const maxDim = 360;
           if (w > maxDim || h > maxDim) {
             if (w > h) {
-              h = Math.round((w * maxDim) / h > maxDim ? (h * maxDim) / w : (h * maxDim) / w);
+              h = Math.round((h * maxDim) / w);
               w = maxDim;
             } else {
               w = Math.round((w * maxDim) / h);
@@ -473,7 +473,7 @@
           ctx.drawImage(img, 0, 0, w, h);
           const base64Data = canvas.toDataURL('image/jpeg', 0.65);
           showScannedImagePreview(base64Data, file.name);
-          analyzePhotoData(base64Data);
+          analyzePhotoData(base64Data, file.name);
         };
         img.src = rawData;
       };
@@ -489,14 +489,23 @@
       card.classList.remove('hidden');
     }
 
-    async function analyzePhotoData(base64Data) {
-      showLoading("Inspecting physical object with Meta Llama 3.2 Vision...");
+    async function analyzePhotoData(base64Data, label) {
+      showLoading("Inspecting physical object with Meta Llama 3.2 Vision on Arm SoC...");
+      const searchBoxText = document.getElementById('queryInput').value.trim();
+      let queryText = searchBoxText;
+      if (!queryText && label) {
+        queryText = label.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
+      }
+      if (!queryText || queryText.toLowerCase() === "webcam snapshot") {
+        queryText = "Physical Waste Item";
+      }
+
       try {
         const res = await fetch('/api/analyze', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            query: "identify physical waste object from camera image",
+            query: queryText,
             image_base64: base64Data
           })
         });

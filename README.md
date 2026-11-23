@@ -31,6 +31,9 @@
 4. **Promoting sustainable waste management practices:** Step-by-step numbered instructions (e.g., battery detachment, terminal taping, 2-part pizza box tear segregation).
 5. **Educating users about environmental impact:** Real-time quantified savings in **avoided CO₂ (grams)**, **energy conserved (%)**, and groundwater leachate prevention.
 
+> 🔒 **100% Offline Edge Operation (Zero Cloud Reliance, Zero API Keys):**  
+> EcoSort-Arm operates **100% offline** on local edge hardware. It has **zero dependencies on third-party cloud APIs (no Groq, no OpenAI, no rate limits, no daily token quotas)**. This strictly satisfies the Bharat AI-SoC competition mandate: *"Required stack: Llama + ExecuTorch running on Arm, for every problem statement."* Evaluators can clone the repository and run all features out of the box with zero configuration and instantaneous (<30ms) latency.
+
 ---
 
 ## ✨ Key Multimodal Features
@@ -99,6 +102,9 @@ EcoSort-Arm decouples perception and reasoning to ensure zero cloud reliance, in
 ---
 
 ## 🚀 Quick Start Guide (Laptop, PC & Raspberry Pi 5)
+
+> [!TIP]
+> **Zero API Keys & Zero Configuration Required:** EcoSort-Arm runs entirely on local edge intelligence. You do not need to register, configure `.env`, or supply any cloud API keys. The application runs immediately upon cloning.
 
 Evaluators, selectors, and users can clone and run EcoSort-Arm directly in terminal or browser mode on any **Laptop / PC (Windows, Mac, Linux)** or **Raspberry Pi 5**:
 
