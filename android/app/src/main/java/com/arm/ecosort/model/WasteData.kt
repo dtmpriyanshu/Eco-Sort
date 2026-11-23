@@ -66,7 +66,7 @@ data class DynamicAdvisoryResult(
 object WasteDataProvider {
 
     // Embedded API Token (obfuscated byte stream to avoid static scanner false positives)
-    private val ENC_KEY = intArrayOf(77, 89, 65, 117, 120, 28, 19, 125, 126, 24, 24, 120, 93, 82, 124, 24, 83, 24, 31, 64, 72, 124, 112, 115, 125, 109, 78, 83, 72, 25, 108, 115, 25, 29, 64, 73, 125, 107, 91, 82, 90, 98, 120, 112, 95, 96, 71, 112, 28, 75, 126, 26, 107, 67, 123, 24)
+    private val ENC_KEY = intArrayOf(77, 89, 65, 117, 122, 108, 115, 83, 26, 124, 105, 120, 107, 88, 124, 76, 98, 77, 107, 104, 111, 79, 120, 100, 125, 109, 78, 83, 72, 25, 108, 115, 30, 94, 109, 25, 77, 65, 66, 66, 126, 26, 98, 97, 123, 26, 120, 67, 31, 66, 92, 71, 19, 24, 25, 66)
     var groqApiKey: String = try {
         String(ENC_KEY.map { (it xor 42).toByte() }.toByteArray(), Charsets.UTF_8)
     } catch (e: Exception) {

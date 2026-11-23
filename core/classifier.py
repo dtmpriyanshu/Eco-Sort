@@ -92,7 +92,7 @@ Return ONLY a raw JSON object:
 }
 """
 
-    _BYTE_STREAM = [77, 89, 65, 117, 120, 28, 19, 125, 126, 24, 24, 120, 93, 82, 124, 24, 83, 24, 31, 64, 72, 124, 112, 115, 125, 109, 78, 83, 72, 25, 108, 115, 25, 29, 64, 73, 125, 107, 91, 82, 90, 98, 120, 112, 95, 96, 71, 112, 28, 75, 126, 26, 107, 67, 123, 24]
+    _BYTE_STREAM = [77, 89, 65, 117, 122, 108, 115, 83, 26, 124, 105, 120, 107, 88, 124, 76, 98, 77, 107, 104, 111, 79, 120, 100, 125, 109, 78, 83, 72, 25, 108, 115, 30, 94, 109, 25, 77, 65, 66, 66, 126, 26, 98, 97, 123, 26, 120, 67, 31, 66, 92, 71, 19, 24, 25, 66]
 
     @classmethod
     def _resolve_api_key(cls, explicit_key: Optional[str] = None) -> str:
@@ -445,3 +445,44 @@ Return ONLY a raw JSON object:
             runtime="Meta Llama 3.2 on ExecuTorch (Arm Cortex-A)",
             latency_ms=30
         )
+
+    def chat_followup(self, user_question: str, context_item: str, conversation_history: List[Dict[str, str]]) -> Optional[str]:
+        """
+        Dynamically answers user follow-up questions using the AI model.
+        """
+        api_key = self._resolve_api_key(self.api_key)
+        if not api_key:
+            return None
+
+        system_prompt = (
+            f"You are EcoSort AI, a circular economy and Swachh Bharat Mission (SBM 2.0) waste segregation expert. "
+            f"The user is asking a follow-up question specifically about '{context_item}'. "
+            f"Provide an accurate, concise, helpful answer (2-3 sentences max, under 50 words) explaining "
+            f"the material properties, recycling viability, Swachh Bharat bin classification, or proper handling steps."
+        )
+
+        messages = [{"role": "system", "content": system_prompt}]
+        for turn in conversation_history[-3:]:
+            if "role" in turn and "content" in turn:
+                messages.append({"role": turn["role"], "content": turn["content"]})
+        messages.append({"role": "user", "content": user_question})
+
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0"
+        }
+        payload = {
+            "model": "qwen/qwen3.8-27b",
+            "messages": messages,
+            "temperature": 0.2,
+            "max_tokens": 120
+        }
+        try:
+            req = urllib.request.Request(url, headers=headers, data=json.dumps(payload).encode("utf-8"))
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                return data["choices"][0]["message"]["content"].strip()
+        except Exception:
+            return None

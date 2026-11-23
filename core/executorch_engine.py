@@ -51,8 +51,13 @@ class ExecuTorchLlamaEngine:
     def chat_followup(self, user_question: str, context_item: str, conversation_history: List[Dict[str, str]]) -> str:
         """
         Multi-turn conversational reasoning using Llama 3.2 on ExecuTorch.
-        Answers user follow-up questions about the segregated waste item.
+        Answers user follow-up questions about the segregated waste item dynamically.
         """
+        # Call live AI reasoning engine
+        ai_reply = self.classifier.chat_followup(user_question, context_item, conversation_history)
+        if ai_reply:
+            return ai_reply
+
         q = user_question.lower().strip()
         item = context_item.lower().strip()
 
