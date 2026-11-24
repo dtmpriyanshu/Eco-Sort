@@ -210,8 +210,16 @@ fun EcoSortApp() {
             val startTime = System.currentTimeMillis()
             val queryHint = chatQuery.trim()
 
-            // 100% On-Device Edge Vision via Google ML Kit (Zero Cloud, Zero API Keys)
-            val finalResult = WasteDataProvider.classifyBitmapOffline(bitmap, hint = queryHint)
+            var finalResult: DynamicAdvisoryResult? = null
+            val b64 = WasteDataProvider.bitmapToBase64(bitmap)
+
+            // 1. Online Multimodal Vision AI via Meta Llama 3.2 Vision (with Groq failover)
+            finalResult = WasteDataProvider.analyzeImageWithLlamaVision(WasteDataProvider.groqApiKey, b64)
+
+            // 2. On-Device Edge Vision via Google ML Kit fallback
+            if (finalResult == null) {
+                finalResult = WasteDataProvider.classifyBitmapOffline(bitmap, hint = queryHint)
+            }
 
             val elapsed = System.currentTimeMillis() - startTime
             isLoading = false
@@ -240,13 +248,33 @@ fun EcoSortApp() {
 
         coroutineScope.launch {
             val qLower = question.lowercase().trim()
-            val isAbuse = listOf(
-                "fuck", "shit", "bitch", "bastard", "idiot", "stupid", "dumb", "crap",
-                "useless", "nonsense", "rubbish", "shut up", "fuck you", "stfu", "moron", "sucks"
-            ).any { qLower.contains(it) }
+            val words = qLower.split(Regex("\\W+")).toSet()
+            val abuseWords = setOf("fuck", "fucking", "fucked", "fucker", "shit", "bitch", "bastard", "asshole", "dick", "pussy", "moron")
+            val isAbuse = qLower.contains("fuck you") || qLower.contains("shut up") || words.any { it in abuseWords }
 
             if (isAbuse) {
                 val reply = "I understand your frustration! EcoSort is an AI assistant dedicated solely to physical waste segregation under India's Swachh Bharat Mission (SBM-Urban 2.0). Please ask about a physical waste item or recycling procedure."
+                isLlamaThinking = false
+                conversationHistory = currentHistory + ChatMessage("assistant", reply)
+                return@launch
+            }
+
+            // OFF-TOPIC / NON-WASTE FILTER: Strictly restrict to waste segregation, recycling & environment
+            val offTopicKeywords = listOf(
+                "python", "code", "coding", "program", "programming", "software", "java", "script",
+                "html", "css", "javascript", "c++", "algorithm", "compiler", "function", "variable",
+                "poem", "story", "essay", "homework", "math", "calculator", "weather", "who is",
+                "cricket", "football", "movie", "song", "music", "president", "minister", "politics",
+                "recipe", "game", "gaming"
+            )
+            val wasteKeywords = listOf(
+                "waste", "recycle", "recycling", "bin", "trash", "garbage", "dispose", "disposal",
+                "kabadiwala", "scrap", "compost", "landfill", "sbm", "swachh", "segregat", "clean",
+                "hazard", "battery", "charger", "e-waste", "ewaste", "plastic", "organic"
+            )
+            val isOffTopic = offTopicKeywords.any { qLower.contains(it) } && !wasteKeywords.any { qLower.contains(it) }
+            if (isOffTopic) {
+                val reply = "I am EcoSort-Arm, an AI assistant dedicated exclusively to physical waste segregation, recycling, and circular economy under India's Swachh Bharat Mission (SBM-Urban 2.0). I cannot assist with general topics like programming or trivia. Please ask about a waste item, scrap material, or recycling method!"
                 isLlamaThinking = false
                 conversationHistory = currentHistory + ChatMessage("assistant", reply)
                 return@launch
