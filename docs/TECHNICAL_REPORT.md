@@ -7,7 +7,7 @@
 **Team Name:** ECO FRIENDLY GUY  
 **Team Members:** Priyanshu, Vikash, Ashutosh  
 **Institution:** North-Eastern Hill University (NEHU), Shillong  
-**Faculty Mentor:** Prof. Subhash C. Arya  
+**Faculty Mentor:** [Prof. Subhash C. Arya](https://github.com/aryasubh)  
 **Target Hardware:** Armv8.2-A / Armv9-A (Raspberry Pi 5 / Arm Linux / Android Smartphones)  
 **Reference Runtime:** ExecuTorch with Arm KleidiAI Micro-kernels & XNNPACK  
 **Repository:** [https://github.com/dtmpriyanshu/Eco-Sort](https://github.com/dtmpriyanshu/Eco-Sort)  

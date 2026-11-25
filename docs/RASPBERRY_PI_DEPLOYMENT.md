@@ -5,7 +5,7 @@
 **Team Name:** ECO FRIENDLY GUY  
 **Team Members:** Priyanshu, Vikash, Ashutosh  
 **Institution:** North-Eastern Hill University (NEHU), Shillong  
-**Faculty Mentor:** Prof. Subhash C. Arya  
+**Faculty Mentor:** [Prof. Subhash C. Arya](https://github.com/aryasubh)  
 **Repository:** [https://github.com/dtmpriyanshu/Eco-Sort](https://github.com/dtmpriyanshu/Eco-Sort)  
 **Demo Video:** [Watch 2.5-Minute Video Walkthrough (Link to be added)](#)
 
