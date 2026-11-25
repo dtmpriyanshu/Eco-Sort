@@ -145,7 +145,8 @@ class WasteClassifier:
 
         # --- STAGE 1: COMPUTER VISION (Cloudflare Meta Llama 3.2 Vision + Groq + Local Edge) ---
         generic_queries = {"", "scanned physical object", "physical waste item", "captured physical waste", "webcam snapshot", "captured photo", "identify physical waste object from camera image"}
-        if image_base64 and raw_text.lower() in generic_queries:
+        is_filename = any(raw_text.lower().startswith(p) for p in ["img", "image", "photo", "pic", "dscn", "screenshot", "media"]) or any(ext in raw_text.lower() for ext in [".jpg", ".png", ".jpeg", ".webp"])
+        if image_base64 and (raw_text.lower() in generic_queries or is_filename or not raw_text.strip()):
             # 1. Try Cloudflare Meta Llama 3.2 Vision
             cf_res = self._analyze_image_cf(image_base64)
             if cf_res is not None:
@@ -210,57 +211,35 @@ class WasteClassifier:
         if not self.cf_token or not self.cf_account_id:
             return None
         import urllib.request, json
-        prompt = """You are EcoSort Multimodal AI, an expert multi-object waste-segregation engine for India's Swachh Bharat Mission (SBM-Urban 2.0).
-Examine this photograph carefully.
-First, determine if there is a clear physical object or waste material present in the frame.
-If the frame only shows a blank wall, floor, empty room, or unclear blur with NO distinct object, return:
-{"total_items_count": 0, "detected_items": []}
-
-Otherwise, detect ALL distinct physical objects or waste materials present in the scene.
-CRITICAL SBM 2.0 STREAM RULES:
-1. COOKED FOOD / LEFTOVERS / PLATES OF FOOD / VEGETABLES / FRUIT PEELS / KITCHEN SCRAPS:
-   - detected_name: e.g. "Leftover Cooked Food / Rice & Curry" or "Plate of Food Leftovers"
-   - category_id: "wet_food"
-   - bin_name: "GREEN BIN — WET / COMPOSTABLE"
-   - bin_color_hex: "0xFF16A34A"
-2. ELECTRICAL CHARGERS / POWER ADAPTERS / PLUGS / SOCKETS / EXTENSION BOARDS / CORDS / PHONES / ELECTRONICS / BATTERIES:
-   - detected_name: e.g. "Phone Charger / Power Adapter" or "Electrical Plug / Socket" or "Smartphone"
-   - category_id: "e_waste"
-   - bin_name: "RED / BLACK BIN — DOMESTIC HAZARDOUS"
-   - bin_color_hex: "0xFFDC2626"
-3. PACKAGING / PLASTIC BOTTLES / SNACK WRAPPERS / CANS / PAPER / CARDBOARD / TEXTILES / UMBRELLAS:
-   - category_id: "dry_plastic", "metal_cans", "dry_textile", or "greasy_paper"
-   - bin_name: "BLUE BIN — DRY RECYCLABLE"
-   - bin_color_hex: "0xFF2563EB"
+        prompt = """You are EcoSort Multimodal AI, an expert waste-segregation vision engine for India's Swachh Bharat Mission (SBM-Urban 2.0).
+Examine this image and identify the primary physical object or waste material present.
+Classify under Swachh Bharat Mission 2.0 rules:
+- GREEN BIN (wet_food): food leftovers, vegetable/fruit peels, tea leaves, organic waste.
+- RED/BLACK BIN (e_waste / domestic_hazardous): phones, chargers, adapters, mice, electronics, batteries, lamps, medicine, clocks.
+- BLUE BIN (dry_plastic / metal_cans / dry_paper / dry_textile): plastic bottles, wrappers, cans, boxes, paper, cloth.
 
 Respond with ONLY valid JSON:
 {
-  "total_items_count": 1,
-  "detected_items": [
-    {
-      "detected_name": "Specific Name of Object",
-      "box_2d": [ymin, xmin, ymax, xmax],
-      "category_id": "wet_food",
-      "bin_name": "GREEN BIN — WET / COMPOSTABLE",
-      "bin_color_hex": "0xFF16A34A",
-      "disposal_recommendation": "1-2 practical disposal instruction sentences.",
-      "recycling_points": ["Material Structure: ...", "Processing Pathway: ...", "Hazard/Resource Note: ...", "Swachh Bharat Norms: ..."],
-      "action_instructions": ["Step 1...", "Step 2...", "Step 3...", "Step 4..."],
-      "environmental_impact": "Impact statement.",
-      "co2_grams": 45.0,
-      "energy_percent": 75
-    }
-  ]
+  "detected_name": "Specific Name of Object",
+  "category_id": "wet_food or dry_plastic or e_waste or metal_cans or greasy_paper or dry_textile",
+  "bin_name": "GREEN BIN — WET / COMPOSTABLE or BLUE BIN — DRY RECYCLABLE or RED / BLACK BIN — DOMESTIC HAZARDOUS",
+  "disposal_recommendation": "1-2 practical disposal instruction sentences.",
+  "recycling_points": ["Recycling point 1", "Recycling point 2", "Recycling point 3"],
+  "action_instructions": ["Action step 1", "Action step 2", "Action step 3", "Action step 4"],
+  "environmental_impact": "Impact statement.",
+  "co2_grams": 45.0,
+  "energy_percent": 75
 }"""
         clean_b64 = image_base64
         if "base64," in clean_b64:
             clean_b64 = clean_b64.split("base64,")[1]
+        clean_b64 = clean_b64.strip()
 
         url = f"https://api.cloudflare.com/client/v4/accounts/{self.cf_account_id}/ai/run/@cf/meta/llama-3.2-11b-vision-instruct"
         payload = {
             "prompt": prompt,
             "image": clean_b64,
-            "max_tokens": 800
+            "max_tokens": 600
         }
         try:
             req = urllib.request.Request(
@@ -268,7 +247,7 @@ Respond with ONLY valid JSON:
                 headers={"Authorization": f"Bearer {self.cf_token}", "Content-Type": "application/json"},
                 data=json.dumps(payload).encode()
             )
-            with urllib.request.urlopen(req, timeout=18) as resp:
+            with urllib.request.urlopen(req, timeout=28) as resp:
                 data = json.loads(resp.read().decode())
                 content = data.get("result", {}).get("response", "")
                 first_b = content.find("{")
@@ -277,7 +256,10 @@ Respond with ONLY valid JSON:
                     json_str = content[first_b:last_b+1]
                     parsed = json.loads(json_str)
                     items = parsed.get("detected_items", [])
-                    if not items or parsed.get("total_items_count", 0) == 0:
+                    item = items[0] if items else parsed
+                    detected_name = item.get("detected_name", "").strip()
+
+                    if not detected_name or detected_name.lower() in ["unidentified", "none", "no object"]:
                         return WasteAnalysisResult(
                             is_waste_eligible=False,
                             detected_name="Unidentified Camera Object",
@@ -289,34 +271,66 @@ Respond with ONLY valid JSON:
                             avoided_co2_grams=0.0,
                             energy_saved_percent=0,
                             validation_message="Could not clearly identify any waste object in this camera frame. Please type what item you are holding (e.g., Phone, Mouse, Plastic Bottle):",
-                            runtime="Meta Llama 3.2 on ExecuTorch (Arm Cortex-A)",
+                            runtime="Meta Llama 3.2 Vision on Arm SoC",
                             latency_ms=35,
                             box_2d=None
                         )
-                    item = items[0]
-                    cat = item.get("category_id", "")
-                    if cat == "wet_food":
+
+                    cat = item.get("category_id", "").lower()
+                    bin_str = item.get("bin_name", "").lower()
+                    if "green" in bin_str or cat in ["wet_food", "organic", "wet"]:
                         stream = STREAM_GREEN
-                    elif cat == "e_waste":
+                    elif "red" in bin_str or "black" in bin_str or cat in ["e_waste", "domestic_hazardous", "hazardous"]:
                         stream = STREAM_RED
                     else:
                         stream = STREAM_BLUE
 
+                    pts = item.get("recycling_points", [])
+                    if isinstance(pts, str):
+                        pts = [pts]
+                    steps = item.get("action_instructions", item.get("action_steps", []))
+                    if isinstance(steps, str):
+                        steps = [steps]
+
                     return WasteAnalysisResult(
                         is_waste_eligible=True,
-                        detected_name=item.get("detected_name", "Identified Waste"),
+                        detected_name=detected_name,
                         stream=stream,
-                        disposal_recommendation=item.get("disposal_recommendation", stream.disposal_advice),
-                        recycling_science=item.get("recycling_points", []),
-                        action_instructions=item.get("action_instructions", []),
-                        environmental_impact=item.get("environmental_impact", ""),
+                        disposal_recommendation=item.get("disposal_recommendation") or stream.disposal_rule,
+                        recycling_science=pts if pts else [stream.description, "Follow Swachh Bharat Mission 2.0 segregation protocols."],
+                        action_instructions=steps if steps else [stream.disposal_rule, "Deposit in designated municipal collection bin."],
+                        environmental_impact=item.get("environmental_impact") or f"Proper segregation of {detected_name} protects India's environment and circular economy.",
                         avoided_co2_grams=float(item.get("co2_grams", 45.0)),
                         energy_saved_percent=int(item.get("energy_percent", 75)),
-                        runtime="Meta Llama 3.2 on ExecuTorch (Arm Cortex-A)",
+                        runtime="Meta Llama 3.2 Vision on Arm SoC",
                         latency_ms=45,
                         box_2d=item.get("box_2d")
                     )
-        except Exception:
+                elif content.strip():
+                    clean_text = content.strip()
+                    explicit_empty = ["blank wall", "no object in the image", "no physical object detected", "cannot see any object", "nothing in the frame"]
+                    if any(p in clean_text.lower() for p in explicit_empty):
+                        return WasteAnalysisResult(
+                            is_waste_eligible=False,
+                            detected_name="Unidentified Camera Object",
+                            stream=STREAM_BLUE,
+                            disposal_recommendation="Could not clearly identify any waste object in this camera frame. Please type what item you are holding (e.g., Phone, Mouse, Plastic Bottle):",
+                            recycling_science=[],
+                            action_instructions=[],
+                            environmental_impact="Waiting for user input to confirm item category.",
+                            avoided_co2_grams=0.0,
+                            energy_saved_percent=0,
+                            validation_message="Could not clearly identify any waste object in this camera frame. Please type what item you are holding (e.g., Phone, Mouse, Plastic Bottle):",
+                            runtime="Meta Llama 3.2 Vision on Arm SoC",
+                            latency_ms=35,
+                            box_2d=None
+                        )
+                    res = self._analyze_material(clean_text, is_image=True)
+                    res.runtime = "Meta Llama 3.2 Vision on Arm SoC"
+                    return res
+        except Exception as e:
+            import sys
+            print(f"[CF_VISION_ERROR] {e}", file=sys.stderr)
             pass
         return None
 
@@ -426,9 +440,9 @@ Respond with ONLY valid JSON:
                     is_waste_eligible=True,
                     detected_name=item.get("detected_name", "Identified Waste"),
                     stream=stream,
-                    disposal_recommendation=item.get("disposal_recommendation", stream.disposal_advice),
-                    recycling_science=item.get("recycling_points", []),
-                    action_instructions=item.get("action_instructions", []),
+                    disposal_recommendation=item.get("disposal_recommendation") or stream.disposal_rule,
+                    recycling_science=item.get("recycling_points", [stream.description]),
+                    action_instructions=item.get("action_instructions", [stream.disposal_rule]),
                     environmental_impact=item.get("environmental_impact", ""),
                     avoided_co2_grams=float(item.get("co2_grams", 45.0)),
                     energy_saved_percent=int(item.get("energy_percent", 75)),
@@ -501,12 +515,14 @@ Respond with ONLY valid JSON:
                 latency_ms=16
             )
 
-        if any(w in q for w in ["mouse", "keyboard", "cable", "wire", "charger", "pcb", "phone", "mobile", "smartphone", "cellphone", "electronics", "circuit", "headphones", "laptop", "earphone", "remote"]):
+        if any(w in q for w in ["mouse", "keyboard", "cable", "wire", "charger", "pcb", "phone", "mobile", "smartphone", "cellphone", "electronics", "circuit", "headphones", "laptop", "earphone", "remote", "clock", "watch", "calculator", "tablet", "screen", "display", "gadget"]):
             if any(w in q for w in ["phone", "mobile", "smartphone", "cellphone"]):
                 name = "Smartphone / Mobile Phone (E-Waste)"
             elif "mouse" in q:
                 name = "Computer Mouse (E-Waste)"
-            elif "electronics" in q:
+            elif any(w in q for w in ["clock", "watch"]):
+                name = "Electronic Clock / Watch (E-Waste)"
+            elif "electronics" in q or "gadget" in q:
                 name = "Electronic Device / E-Waste"
             else:
                 name = title_name

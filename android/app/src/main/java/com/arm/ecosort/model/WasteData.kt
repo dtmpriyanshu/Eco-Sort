@@ -347,65 +347,35 @@ object WasteDataProvider {
         if (apiKey.isBlank() && cfApiToken.isBlank()) return@withContext null
 
         val prompt = """
-You are EcoSort Multimodal AI, an expert multi-object waste-segregation engine for India's Swachh Bharat Mission (SBM-Urban 2.0).
-Examine this photograph carefully.
-First, determine if there is a clear physical object or waste material present in the frame.
-If the frame only shows a blank wall, floor, empty room, or unclear blur with NO distinct object, return:
-{"total_items_count": 0, "detected_items": []}
-
-Otherwise, detect ALL distinct physical objects or waste materials present in the scene.
-CRITICAL SBM 2.0 STREAM RULES:
-1. COOKED FOOD / LEFTOVERS / PLATES OF FOOD / VEGETABLES / FRUIT PEELS / KITCHEN SCRAPS:
-   - detected_name: e.g. "Leftover Cooked Food / Rice & Curry" or "Plate of Food Leftovers"
-   - category_id: "wet_food"
-   - bin_name: "GREEN BIN — WET / COMPOSTABLE"
-   - bin_color_hex: "0xFF16A34A"
-2. ELECTRICAL CHARGERS / POWER ADAPTERS / PLUGS / SOCKETS / EXTENSION BOARDS / CORDS / PHONES / ELECTRONICS / BATTERIES:
-   - detected_name: e.g. "Phone Charger / Power Adapter" or "Electrical Plug / Socket" or "Smartphone"
-   - category_id: "e_waste"
-   - bin_name: "RED / BLACK BIN — DOMESTIC HAZARDOUS"
-   - bin_color_hex: "0xFFDC2626"
-3. PACKAGING / PLASTIC BOTTLES / SNACK WRAPPERS / CANS / PAPER / CARDBOARD / TEXTILES / UMBRELLAS:
-   - category_id: "dry_plastic", "metal_cans", "dry_textile", or "greasy_paper"
-   - bin_name: "BLUE BIN — DRY RECYCLABLE"
-   - bin_color_hex: "0xFF2563EB"
-
-For EACH detected item:
-1. Provide exact physical object name.
-2. Provide bounding box `box_2d` as [ymin, xmin, ymax, xmax] normalized 0..1000.
-3. Assign its category_id, bin_name, bin_color_hex.
-4. 4 scientific bullet points on material composition and recycling/RDF processing.
-5. 4 step-by-step action instructions for disposal.
-6. Quantified environmental impact (co2_grams and energy_percent).
+You are EcoSort AI, an expert waste-segregation vision engine for India's Swachh Bharat Mission (SBM-Urban 2.0).
+Examine this image and identify the primary physical object or waste material present.
+Classify under Swachh Bharat Mission 2.0 rules:
+- GREEN BIN (wet_food): food leftovers, vegetable/fruit peels, tea leaves, organic waste.
+- RED/BLACK BIN (e_waste / domestic_hazardous): phones, chargers, adapters, mice, electronics, batteries, lamps, medicine, clocks.
+- BLUE BIN (dry_plastic / metal_cans / dry_paper / dry_textile): plastic bottles, wrappers, cans, boxes, paper, cloth.
 
 Respond with ONLY valid JSON:
 {
-  "total_items_count": 1,
-  "detected_items": [
-    {
-      "detected_name": "Specific Name of Object",
-      "box_2d": [ymin, xmin, ymax, xmax],
-      "category_id": "wet_food", // wet_food, e_waste, dry_plastic, metal_cans, dry_textile, greasy_paper
-      "bin_name": "GREEN BIN — WET / COMPOSTABLE",
-      "bin_color_hex": "0xFF16A34A",
-      "disposal_recommendation": "Clear actionable disposal sentence.",
-      "recycling_points": [
-        "Material Structure: ...",
-        "Processing Pathway: ...",
-        "Hazard/Resource Note: ...",
-        "Swachh Bharat Norms: ..."
-      ],
-      "action_instructions": [
-        "Step 1...",
-        "Step 2...",
-        "Step 3...",
-        "Step 4..."
-      ],
-      "environmental_impact": "Impact statement.",
-      "co2_grams": 45.0,
-      "energy_percent": 75
-    }
-  ]
+  "detected_name": "Specific Name of Object",
+  "category_id": "wet_food", // wet_food, e_waste, dry_plastic, metal_cans, dry_textile, greasy_paper
+  "bin_name": "GREEN BIN — WET / COMPOSTABLE", // or BLUE BIN — DRY RECYCLABLE or RED / BLACK BIN — DOMESTIC HAZARDOUS
+  "bin_color_hex": "0xFF16A34A",
+  "disposal_recommendation": "1-2 practical disposal instruction sentences.",
+  "recycling_points": [
+    "Material Structure: ...",
+    "Processing Pathway: ...",
+    "Hazard/Resource Note: ...",
+    "Swachh Bharat Norms: ..."
+  ],
+  "action_instructions": [
+    "Step 1...",
+    "Step 2...",
+    "Step 3...",
+    "Step 4..."
+  ],
+  "environmental_impact": "Impact statement.",
+  "co2_grams": 45.0,
+  "energy_percent": 75
 }
         """.trimIndent()
 
@@ -798,6 +768,30 @@ Respond with ONLY a raw JSON object (no markdown, no backticks):
             val firstBrace = contentStr.indexOf('{')
             val lastBrace = contentStr.lastIndexOf('}')
             if (firstBrace == -1 || lastBrace == -1 || lastBrace <= firstBrace) {
+                val clean = contentStr.trim()
+                if (clean.isNotBlank()) {
+                    val offline = classifyItemOffline(clean)
+                    return DynamicAdvisoryResult(
+                        category = offline.category,
+                        detectedName = offline.detectedName,
+                        customPoints = offline.customPoints,
+                        customSteps = offline.customSteps,
+                        customImpact = offline.customImpact,
+                        modelSource = modelSource,
+                        detectedItems = listOf(
+                            DetectedItem(
+                                detectedName = offline.detectedName,
+                                category = offline.category,
+                                box2d = emptyList(),
+                                customPoints = offline.customPoints,
+                                customSteps = offline.customSteps,
+                                customImpact = offline.customImpact,
+                                co2Grams = offline.category.co2Grams,
+                                energyPercent = offline.category.energySavedPercent
+                            )
+                        )
+                    )
+                }
                 return null
             }
             val jsonSnippet = contentStr.substring(firstBrace, lastBrace + 1)
@@ -1250,8 +1244,8 @@ Respond with ONLY a raw JSON object (no markdown, no backticks):
         }
 
         // 6. COMPUTER MOUSE, KEYBOARD & ELECTRONIC CORDS (RED BIN)
-        if (listOf("mouse", "keyboard", "cable", "wire", "cord", "pcb", "circuit", "headphone", "earphone", "remote", "electronics").any { q.contains(it) }) {
-            val detectedName = if (q.contains("mouse")) "Computer Mouse" else if (q.contains("keyboard")) "Computer Keyboard" else if (q.contains("cable") || q.contains("wire")) "Power Cord / Cable" else name
+        if (listOf("mouse", "keyboard", "cable", "wire", "cord", "pcb", "circuit", "headphone", "earphone", "remote", "electronics", "clock", "watch", "calculator", "tablet", "screen", "display").any { q.contains(it) }) {
+            val detectedName = if (q.contains("mouse")) "Computer Mouse" else if (q.contains("keyboard")) "Computer Keyboard" else if (q.contains("clock") || q.contains("watch")) "Electronic Clock / Watch" else if (q.contains("cable") || q.contains("wire")) "Power Cord / Cable" else name
             val customCategory = baseCategories[5].copy(
                 categoryName = "Domestic Hazardous / E-Waste: $detectedName",
                 binName = "RED / BLACK BIN — DOMESTIC HAZARDOUS",
