@@ -54,7 +54,7 @@
 
 | Target Platform | Processor / Architecture | Accelerator & Runtime | User Interface |
 | :--- | :--- | :--- | :--- |
-| **Android Smartphone** | Arm Cortex-A (MediaTek Helio G85 / Cortex-A55) | ExecuTorch INT4 + Arm KleidiAI | Native Android App (Jetpack Compose) |
+| **Android Smartphone** | Arm Cortex-A | ExecuTorch INT4 + Arm KleidiAI | Native Android App (Jetpack Compose) |
 | **Raspberry Pi 5 (CPU-only)** | Broadcom BCM2712 (Quad-core Arm Cortex-A76 @ 2.4 GHz) | ExecuTorch with XNNPACK & KleidiAI ukernels | Web Kiosk (`http://localhost:8000`) & Terminal CLI |
 | **Raspberry Pi 5 + AI HAT+** | Arm Cortex-A76 + Hailo-8 / Hailo-8L NPU (13–26 TOPS) | Dual-Pipeline: HailoRT (Vision) + ExecuTorch (Llama) | Autonomous Smart Bin Kiosk |
 | **Arm-based Linux Devices** | Generic Armv8.2-A / Armv9-A (NVIDIA Jetson, RK3588, etc.) | ExecuTorch INT4 reference runtime | CLI (`python cli.py`) & FastAPI Service |
