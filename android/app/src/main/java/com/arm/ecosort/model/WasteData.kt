@@ -770,6 +770,8 @@ Respond with ONLY a raw JSON object (no markdown, no backticks):
             if (firstBrace == -1 || lastBrace == -1 || lastBrace <= firstBrace) {
                 val clean = contentStr.trim()
                 if (clean.isNotBlank()) {
+                    val mdParsed = parseMarkdownVisionResponse(clean, modelSource)
+                    if (mdParsed != null) return mdParsed
                     val offline = classifyItemOffline(clean)
                     return DynamicAdvisoryResult(
                         category = offline.category,
@@ -843,13 +845,149 @@ Respond with ONLY a raw JSON object (no markdown, no backticks):
     }
 
     /**
+     * Parses Markdown/unformatted natural-language vision output from Llama Vision.
+     * Extracts clean item names (e.g. 'Electric Clothes Iron'), disposal recommendations,
+     * and recycling points without raw markdown asterisks or multi-line text dumps.
+     */
+    fun parseMarkdownVisionResponse(raw: String, modelSource: String): DynamicAdvisoryResult? {
+        val patterns = listOf(
+            Regex("""(?:present in the image is an?|present is an?|object (?:is|in the image is) an?|waste item is an?|shows an?|detected an?)\s+([a-zA-Z0-9\s-]+?)(?:\.|\,|\n|which|that|indicating|placed|\sis\b)""", RegexOption.IGNORE_CASE),
+            Regex("""(?:primary physical object [^.]+? is an?)\s+([a-zA-Z0-9\s-]+?)(?:\.|\,|\n|which|that)""", RegexOption.IGNORE_CASE),
+            Regex("""(?:image shows an?)\s+([a-zA-Z0-9\s-]+?)(?:\.|\,|\n)""", RegexOption.IGNORE_CASE)
+        )
+        var detectedName = ""
+        for (pat in patterns) {
+            val match = pat.find(raw)
+            if (match != null) {
+                val cand = match.groupValues[1].trim()
+                if (cand.split(Regex("""\s+""")).size <= 4) {
+                    detectedName = cand
+                    break
+                }
+            }
+        }
+
+        val knownItems = listOf(
+            "clothes iron" to "Electric Clothes Iron",
+            "electric iron" to "Electric Clothes Iron",
+            "iron" to "Electric Clothes Iron",
+            "smartphone" to "Smartphone (E-Waste)",
+            "phone" to "Mobile Phone (E-Waste)",
+            "mouse" to "Computer Mouse (E-Waste)",
+            "keyboard" to "Computer Keyboard (E-Waste)",
+            "charger" to "Phone Charger / Power Adapter",
+            "cable" to "Power Cable / Wire",
+            "clock" to "Electronic Clock (E-Waste)",
+            "watch" to "Wristwatch / Smartwatch",
+            "battery" to "Battery / Chemical Cell",
+            "bottle" to "Plastic Beverage Bottle",
+            "wrapper" to "Snack Food Wrapper",
+            "can" to "Metal Beverage Can",
+            "carton" to "Cardboard Box / Carton",
+            "banana peel" to "Fruit / Banana Peel",
+            "peel" to "Fruit / Vegetable Peel",
+            "apple" to "Fruit / Food Scrap",
+            "food" to "Cooked Food Scraps",
+            "umbrella" to "Umbrella (Composite Dry)",
+            "shoe" to "Footwear / Shoes (Dry Recyclable)"
+        )
+        if (detectedName.isBlank()) {
+            for ((kw, proper) in knownItems) {
+                if (Regex("""\b${Regex.escape(kw)}\b""", RegexOption.IGNORE_CASE).containsMatchIn(raw)) {
+                    detectedName = proper
+                    break
+                }
+            }
+        }
+        if (detectedName.isBlank()) {
+            detectedName = "Identified Waste Item"
+        } else {
+            detectedName = detectedName.split(" ").joinToString(" ") { word -> word.replaceFirstChar { c -> c.uppercase() } }
+        }
+
+        val dispMatch = Regex("""\*\*Disposal Recommendation:\*\*\s*["']?([^"\n\r*]+)""", RegexOption.IGNORE_CASE).find(raw)
+        var disposal = dispMatch?.groupValues?.get(1)?.trim()?.trim('"', '\'', '*', ' ') ?: ""
+
+        val binMatch = Regex("""\*\*Bin Name:\*\*\s*([^\n\r*]+)""", RegexOption.IGNORE_CASE).find(raw)
+        val binStr = (binMatch?.groupValues?.get(1)?.trim() ?: "").lowercase()
+
+        val rawLower = raw.lowercase()
+        val baseCat = when {
+            binStr.contains("green") || listOf("wet_food", "compost", "fruit", "vegetable", "kitchen scrap", "food leftover").any { rawLower.contains(it) } -> baseCategories[2]
+            binStr.contains("red") || binStr.contains("black") || listOf("e_waste", "e-waste", "hazardous", "iron", "electronics", "battery", "charger", "appliance", "phone").any { rawLower.contains(it) } -> baseCategories[5]
+            else -> baseCategories[0]
+        }
+
+        val customCategory = baseCat.copy(
+            disposalRecommendation = if (disposal.isNotBlank() && disposal.length > 10) disposal else "Deposit $detectedName into the ${baseCat.binName}. ${baseCat.disposalRecommendation}"
+        )
+
+        val bulletLines = raw.lines().filter { line ->
+            val trimmed = line.trim()
+            (trimmed.startsWith("* ") || trimmed.startsWith("- ")) &&
+            !trimmed.startsWith("* **Bin Name") && !trimmed.startsWith("- **Bin Name") &&
+            !trimmed.startsWith("* **Bin Color") && !trimmed.startsWith("- **Bin Color") &&
+            !trimmed.startsWith("* **Disposal") && !trimmed.startsWith("- **Disposal")
+        }.map { line ->
+            line.trim()
+                .removePrefix("* ")
+                .removePrefix("- ")
+                .replace("**", "")
+                .trim()
+        }.filter { it.isNotBlank() }
+
+        val points = if (bulletLines.isNotEmpty()) bulletLines.take(4) else customCategory.recyclingPoints
+        val steps = customCategory.sustainablePractices
+        val impact = "Proper segregation of $detectedName prevents toxic environmental contamination and recovers valuable secondary resources."
+
+        val detItem = DetectedItem(
+            detectedName = detectedName,
+            category = customCategory,
+            box2d = emptyList(),
+            customPoints = points,
+            customSteps = steps,
+            customImpact = impact,
+            co2Grams = customCategory.co2Grams,
+            energyPercent = customCategory.energySavedPercent
+        )
+
+        return DynamicAdvisoryResult(
+            category = customCategory,
+            detectedName = detectedName,
+            customPoints = points,
+            customSteps = steps,
+            customImpact = impact,
+            modelSource = modelSource,
+            detectedItems = listOf(detItem)
+        )
+    }
+
+    /**
      * Executes dynamic conversational LLM query against Cloudflare Meta Llama 3.2 & Groq.
      * Supports multi-turn follow-up queries with model failover.
      */
     suspend fun callGroqLlamaChat(
         apiKey: String,
-        messages: List<ChatMessage>
+        messages: List<ChatMessage>,
+        contextItem: String = ""
     ): String = withContext(Dispatchers.IO) {
+        val ctx = contextItem.trim().ifEmpty { "the identified waste item" }
+        val systemPrompt = """
+You are EcoSort AI, an expert circular economy & waste segregation advisor for India's Swachh Bharat Mission (SBM-Urban 2.0).
+CURRENT ITEM CONTEXT: The user is specifically asking about: '$ctx'.
+All questions like 'what should I do with this?', 'where can I resell this?', 'can I sell this to kabadiwala?', 'is this recyclable?', 'how to dispose it?' refer directly to '$ctx'.
+You enthusiastically help users with:
+1. Reselling, trade-ins, and brand buybacks (e.g., Cashify, Croma, Reliance Digital, Amazon/Flipkart trade-ins for electronics/appliances; pre-owned platforms).
+2. Selling to local scrap dealers / kabadiwalas and scrap pricing.
+3. Repairing, refurbishing, donating to NGOs, upcycling.
+4. Proper Swachh Bharat bin segregation (Green = Wet/Compost, Blue = Dry Recyclables, Red/Black = Domestic Hazardous/E-Waste) and municipal SBM 2.0 rules.
+5. Environmental and hazard safety.
+RULES:
+- NEVER ask the user what item they are holding or talking about; you already know it is '$ctx'.
+- Answer directly, practically, and concisely (2-4 clear sentences or bullet points) with Indian context.
+- Only refuse completely unrelated queries that have zero connection to items, materials, waste, recycling, or circular economy (e.g. 'write python code', 'who won the match').
+        """.trimIndent()
+
         // 1. Primary: Cloudflare Meta Llama 3.2 Follow-up Chat (Ultra-Fast 3B with 11B Vision fallback)
         if (cfApiToken.isNotBlank() && cfAccountId.isNotBlank()) {
             val cfModels = listOf("@cf/meta/llama-3.2-3b-instruct", "@cf/meta/llama-3.2-11b-vision-instruct")
@@ -868,13 +1006,19 @@ Respond with ONLY a raw JSON object (no markdown, no backticks):
                     val jsonMessages = JSONArray()
                     jsonMessages.put(JSONObject().apply {
                         put("role", "system")
-                        put("content", "You are EcoSort AI Waste Assistant for India's Swachh Bharat Mission (SBM-Urban 2.0). STRICT DOMAIN POLICY: You strictly and exclusively answer questions regarding physical waste segregation, recycling, composting, e-waste handling, kabadiwalas/scrap dealers, and SBM 2.0 norms. If the user asks about anything unrelated to waste, recycling, materials, or environmental sustainability (such as coding, programming, running Python, gaming, general conversation, homework, politics), politely REFUSE in 1 concise sentence and guide them back to waste segregation.")
+                        put("content", systemPrompt)
                     })
 
-                    messages.takeLast(6).forEach { msg ->
+                    val lastFew = messages.takeLast(6)
+                    lastFew.forEachIndexed { idx, msg ->
+                        val content = if (idx == (lastFew.size - 1) && msg.sender == "user" && ctx.isNotBlank() && !msg.text.startsWith("[Regarding")) {
+                            "[Regarding $ctx]: ${msg.text}"
+                        } else {
+                            msg.text
+                        }
                         jsonMessages.put(JSONObject().apply {
                             put("role", if (msg.sender == "user") "user" else "assistant")
-                            put("content", msg.text)
+                            put("content", content)
                         })
                     }
 
@@ -902,7 +1046,6 @@ Respond with ONLY a raw JSON object (no markdown, no backticks):
                         }
                     }
                 } catch (e: Exception) {
-                    // Try next model if timed out or failed
                     continue
                 }
             }
@@ -1174,7 +1317,10 @@ Respond with ONLY a raw JSON object (no markdown, no backticks):
         )
         val wasteKeywords = listOf(
             "waste", "recycle", "recycling", "bin", "trash", "garbage", "dispose", "disposal",
-            "kabadiwala", "scrap", "compost", "landfill", "sbm", "swachh", "segregat"
+            "kabadiwala", "scrap", "compost", "landfill", "sbm", "swachh", "segregat",
+            "resell", "sell", "buyer", "buyback", "exchange", "cashify", "croma", "reliance",
+            "olx", "second hand", "refurbish", "repair", "donate", "donation", "value",
+            "price", "rupees", "cost", "market", "take back", "iron", "phone", "bottle"
         )
         if (offTopicKeywords.any { q.contains(it) } && !wasteKeywords.any { q.contains(it) }) {
             return DynamicAdvisoryResult(
@@ -1189,7 +1335,28 @@ Respond with ONLY a raw JSON object (no markdown, no backticks):
             )
         }
 
-        val name = if (userQuery.isNotBlank()) userQuery.trim().replaceFirstChar { it.uppercase() } else "Unspecified Item"
+        val cleanNameCand = if (userQuery.isNotBlank()) {
+            val trimmed = userQuery.trim()
+            if (trimmed.split(Regex("""\s+""")).size > 4) {
+                when {
+                    q.contains("iron") -> "Electric Clothes Iron"
+                    q.contains("phone") || q.contains("smartphone") -> "Smartphone"
+                    q.contains("mouse") -> "Computer Mouse"
+                    q.contains("keyboard") -> "Computer Keyboard"
+                    q.contains("charger") -> "Phone Charger"
+                    q.contains("bottle") -> "Plastic Bottle"
+                    q.contains("battery") -> "Battery"
+                    q.contains("clock") || q.contains("watch") -> "Electronic Clock / Watch"
+                    q.contains("can") -> "Metal Beverage Can"
+                    q.contains("box") || q.contains("carton") -> "Cardboard Box"
+                    q.contains("peel") || q.contains("banana") -> "Fruit / Vegetable Peel"
+                    else -> trimmed.split(Regex("""[.,\n]"""))[0].take(30).trim().replaceFirstChar { it.uppercase() }
+                }
+            } else {
+                trimmed.replaceFirstChar { it.uppercase() }
+            }
+        } else "Unspecified Item"
+        val name = cleanNameCand
 
         // 4. CHARGERS, ADAPTERS, PLUGS, EXTENSION CORDS (RED BIN)
         if (listOf("charger", "adapter", "plug", "socket", "extension", "power supply", "outlet").any { q.contains(it) }) {
@@ -1244,8 +1411,8 @@ Respond with ONLY a raw JSON object (no markdown, no backticks):
         }
 
         // 6. COMPUTER MOUSE, KEYBOARD & ELECTRONIC CORDS (RED BIN)
-        if (listOf("mouse", "keyboard", "cable", "wire", "cord", "pcb", "circuit", "headphone", "earphone", "remote", "electronics", "clock", "watch", "calculator", "tablet", "screen", "display").any { q.contains(it) }) {
-            val detectedName = if (q.contains("mouse")) "Computer Mouse" else if (q.contains("keyboard")) "Computer Keyboard" else if (q.contains("clock") || q.contains("watch")) "Electronic Clock / Watch" else if (q.contains("cable") || q.contains("wire")) "Power Cord / Cable" else name
+        if (listOf("mouse", "keyboard", "cable", "wire", "cord", "pcb", "circuit", "headphone", "earphone", "remote", "electronics", "clock", "watch", "calculator", "tablet", "screen", "display", "iron", "clothes iron", "press", "heater", "toaster", "kettle", "microwave", "fan", "mixer", "appliance").any { q.contains(it) }) {
+            val detectedName = if (q.contains("mouse")) "Computer Mouse" else if (q.contains("keyboard")) "Computer Keyboard" else if (q.contains("iron") || q.contains("press")) "Electric Clothes Iron" else if (q.contains("clock") || q.contains("watch")) "Electronic Clock / Watch" else if (q.contains("cable") || q.contains("wire")) "Power Cord / Cable" else name
             val customCategory = baseCategories[5].copy(
                 categoryName = "Domestic Hazardous / E-Waste: $detectedName",
                 binName = "RED / BLACK BIN — DOMESTIC HAZARDOUS",

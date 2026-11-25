@@ -247,7 +247,7 @@
         <p id="streamRec" class="text-sm sm:text-base mt-2 opacity-95 font-medium leading-relaxed"></p>
         <div class="mt-4 pt-3 border-t border-white/20 flex items-center justify-between text-xs font-semibold">
           <span id="detectedItemName" class="opacity-90"></span>
-          <span id="latencySpan" class="opacity-90"></span>
+          <span id="latencySpan" class="hidden"></span>
         </div>
       </div>
 
@@ -689,11 +689,12 @@
       feed.appendChild(userDiv);
 
       try {
+        const queryPayload = currentItem ? `[Regarding ${currentItem}]: ${question}` : question;
         const res = await fetch('/api/followup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            question: question,
+            question: queryPayload,
             context_item: currentItem,
             history: chatHistory
           })
@@ -707,8 +708,8 @@
         feed.appendChild(asstDiv);
         feed.scrollTop = feed.scrollHeight;
 
-        chatHistory.push({ role: "user", content: question });
-        chatHistory.push({ role: "assistant", content: data.reply });
+        chatHistory.push({ sender: "user", text: question, role: "user", content: question });
+        chatHistory.push({ sender: "assistant", text: data.reply, role: "assistant", content: data.reply });
 
       } catch (err) {
         console.error(err);

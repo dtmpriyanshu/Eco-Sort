@@ -270,7 +270,10 @@ fun EcoSortApp() {
             val wasteKeywords = listOf(
                 "waste", "recycle", "recycling", "bin", "trash", "garbage", "dispose", "disposal",
                 "kabadiwala", "scrap", "compost", "landfill", "sbm", "swachh", "segregat", "clean",
-                "hazard", "battery", "charger", "e-waste", "ewaste", "plastic", "organic"
+                "hazard", "battery", "charger", "e-waste", "ewaste", "plastic", "organic",
+                "resell", "sell", "buyer", "buyback", "exchange", "cashify", "croma", "reliance",
+                "olx", "second hand", "refurbish", "repair", "donate", "donation", "value",
+                "price", "rupees", "cost", "market", "take back", "iron", "phone", "bottle"
             )
             val isOffTopic = offTopicKeywords.any { qLower.contains(it) } && !wasteKeywords.any { qLower.contains(it) }
             if (isOffTopic) {
@@ -281,8 +284,9 @@ fun EcoSortApp() {
             }
 
             val apiKey = WasteDataProvider.groqApiKey
-            if (apiKey.isNotBlank()) {
-                val llamaReply = WasteDataProvider.callGroqLlamaChat(apiKey, currentHistory)
+            val currentContextItem = if (detectedLabelName.isNotBlank() && detectedLabelName != "Unidentified Object") detectedLabelName else activeCategory.categoryName
+            if (apiKey.isNotBlank() || WasteDataProvider.cfApiToken.isNotBlank()) {
+                val llamaReply = WasteDataProvider.callGroqLlamaChat(apiKey, currentHistory, currentContextItem)
                 isLlamaThinking = false
                 conversationHistory = currentHistory + ChatMessage("assistant", llamaReply)
             } else {
@@ -1500,8 +1504,8 @@ fun EcoSortApp() {
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Text("AI LATENCY", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
-                                        Text("$aiLatencyMs ms", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF16A34A))
+                                        Text("STATUS", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
+                                        Text("Active (Online)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF16A34A))
                                     }
                                 }
                             }

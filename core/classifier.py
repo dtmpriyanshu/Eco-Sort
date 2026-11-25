@@ -325,14 +325,108 @@ Respond with ONLY valid JSON:
                             latency_ms=35,
                             box_2d=None
                         )
-                    res = self._analyze_material(clean_text, is_image=True)
-                    res.runtime = "Meta Llama 3.2 Vision on Arm SoC"
-                    return res
+                    return self._parse_markdown_vision(clean_text)
         except Exception as e:
             import sys
             print(f"[CF_VISION_ERROR] {e}", file=sys.stderr)
             pass
         return None
+
+    def _parse_markdown_vision(self, raw: str) -> WasteAnalysisResult:
+        """
+        Parses unformatted natural-language or Markdown vision model output.
+        Extracts clean item names (e.g. 'Electric Clothes Iron'), disposal recommendations,
+        and recycling points without raw markdown asterisks or multi-line text dumps.
+        """
+        import re
+        detected_name = ""
+        patterns = [
+            r'(?:present in the image is an?|present is an?|object (?:is|in the image is) an?|waste item is an?|shows an?|detected an?)\s+([a-zA-Z0-9\s-]+?)(?:\.|\,|\n|which|that|indicating|placed|\sis\b)',
+            r'(?:primary physical object [^.]+? is an?)\s+([a-zA-Z0-9\s-]+?)(?:\.|\,|\n|which|that)',
+            r'(?:image shows an?)\s+([a-zA-Z0-9\s-]+?)(?:\.|\,|\n)'
+        ]
+        for pat in patterns:
+            m = re.search(pat, raw, re.IGNORECASE)
+            if m:
+                cand = m.group(1).strip()
+                if len(cand.split()) <= 4:
+                    detected_name = cand
+                    break
+
+        known_items = [
+            ("clothes iron", "Electric Clothes Iron"),
+            ("electric iron", "Electric Clothes Iron"),
+            ("iron", "Electric Clothes Iron"),
+            ("smartphone", "Smartphone (E-Waste)"),
+            ("phone", "Mobile Phone (E-Waste)"),
+            ("mouse", "Computer Mouse (E-Waste)"),
+            ("keyboard", "Computer Keyboard (E-Waste)"),
+            ("charger", "Phone Charger / Power Adapter"),
+            ("cable", "Power Cable / Wire"),
+            ("clock", "Electronic Clock (E-Waste)"),
+            ("watch", "Wristwatch / Smartwatch"),
+            ("battery", "Battery / Chemical Cell"),
+            ("bottle", "Plastic Beverage Bottle"),
+            ("wrapper", "Snack Food Wrapper"),
+            ("can", "Metal Beverage Can"),
+            ("carton", "Cardboard Box / Carton"),
+            ("banana peel", "Fruit / Banana Peel"),
+            ("peel", "Fruit / Vegetable Peel"),
+            ("apple", "Fruit / Food Scrap"),
+            ("food", "Cooked Food Scraps"),
+            ("umbrella", "Umbrella (Composite Dry)"),
+            ("shoe", "Footwear / Shoes (Dry Recyclable)")
+        ]
+        if not detected_name:
+            for kw, proper in known_items:
+                if re.search(rf'\b{re.escape(kw)}\b', raw, re.IGNORECASE):
+                    detected_name = proper
+                    break
+
+        if not detected_name:
+            detected_name = "Identified Waste Item"
+        else:
+            detected_name = detected_name.title()
+
+        disp_m = re.search(r'\*\*Disposal Recommendation:\*\*\s*["\']?([^"\n\r*]+)', raw, re.IGNORECASE)
+        disposal = disp_m.group(1).strip().strip('"\'*') if disp_m else ""
+
+        bin_m = re.search(r'\*\*Bin Name:\*\*\s*([^\n\r*]+)', raw, re.IGNORECASE)
+        bin_str = (bin_m.group(1).strip() if bin_m else "").lower()
+
+        raw_lower = raw.lower()
+        if "green" in bin_str or any(w in raw_lower for w in ["wet_food", "compost", "fruit", "vegetable", "kitchen scrap", "food leftover"]):
+            stream = STREAM_GREEN
+        elif "red" in bin_str or "black" in bin_str or any(w in raw_lower for w in ["e_waste", "e-waste", "hazardous", "iron", "electronics", "battery", "charger", "appliance", "phone"]):
+            stream = STREAM_RED
+        else:
+            stream = STREAM_BLUE
+
+        if not disposal:
+            disposal = f"Deposit {detected_name} into the {stream.bin_name}. {stream.disposal_rule}"
+
+        bullets = re.findall(r'^\s*[\*\-]\s+(.+)$', raw, re.MULTILINE)
+        clean_bullets = [
+            b.strip().replace('**', '') for b in bullets 
+            if not any(b.strip().startswith(prefix) for prefix in [
+                '**Bin Name', '**Bin Color', '**Disposal', 'Bin Name', 'Bin Color', 'Disposal'
+            ])
+        ]
+
+        return WasteAnalysisResult(
+            is_waste_eligible=True,
+            detected_name=detected_name,
+            stream=stream,
+            disposal_recommendation=disposal,
+            recycling_science=clean_bullets[:4] if clean_bullets else [stream.description, "Follow Swachh Bharat Mission 2.0 segregation protocols."],
+            action_instructions=[stream.disposal_rule, "Do not mix with other waste streams.", "Take to designated municipal collection point."],
+            environmental_impact=f"Proper segregation of {detected_name} prevents landfill contamination and supports circular resource recovery.",
+            avoided_co2_grams=450.0 if stream == STREAM_RED else 60.0,
+            energy_saved_percent=80 if stream == STREAM_RED else 65,
+            runtime="Meta Llama 3.2 Vision on Arm SoC",
+            latency_ms=35,
+            box_2d=None
+        )
 
     def _analyze_image_groq(self, image_base64: str) -> Optional[WasteAnalysisResult]:
         if not self.api_key:
@@ -515,17 +609,21 @@ Respond with ONLY valid JSON:
                 latency_ms=16
             )
 
-        if any(w in q for w in ["mouse", "keyboard", "cable", "wire", "charger", "pcb", "phone", "mobile", "smartphone", "cellphone", "electronics", "circuit", "headphones", "laptop", "earphone", "remote", "clock", "watch", "calculator", "tablet", "screen", "display", "gadget"]):
+        if any(w in q for w in ["mouse", "keyboard", "cable", "wire", "charger", "pcb", "phone", "mobile", "smartphone", "cellphone", "electronics", "circuit", "headphones", "laptop", "earphone", "remote", "clock", "watch", "calculator", "tablet", "screen", "display", "gadget", "iron", "clothes iron", "press", "heater", "toaster", "kettle", "microwave", "fan", "mixer", "appliance"]):
             if any(w in q for w in ["phone", "mobile", "smartphone", "cellphone"]):
                 name = "Smartphone / Mobile Phone (E-Waste)"
             elif "mouse" in q:
                 name = "Computer Mouse (E-Waste)"
+            elif any(w in q for w in ["iron", "clothes iron", "press"]):
+                name = "Electric Clothes Iron (E-Waste)"
             elif any(w in q for w in ["clock", "watch"]):
                 name = "Electronic Clock / Watch (E-Waste)"
+            elif any(w in q for w in ["heater", "toaster", "kettle", "microwave", "fan", "mixer", "appliance"]):
+                name = "Small Home Appliance (E-Waste)"
             elif "electronics" in q or "gadget" in q:
                 name = "Electronic Device / E-Waste"
             else:
-                name = title_name
+                name = title_name if len(title_name.split()) <= 4 else "Electronic Appliance (E-Waste)"
             return WasteAnalysisResult(
                 is_waste_eligible=True,
                 detected_name=name,
@@ -887,21 +985,46 @@ Respond with ONLY valid JSON:
                      "poem", "story", "essay", "homework", "math", "calculator", "weather", "who is",
                      "cricket", "football", "movie", "song", "music", "president", "minister", "politics",
                      "recipe", "game", "gaming"]
-        waste_words = ["waste", "recycle", "recycling", "bin", "trash", "garbage", "dispose", "disposal",
-                       "kabadiwala", "scrap", "compost", "landfill", "sbm", "swachh", "segregat"]
+        waste_words = [
+            "waste", "recycle", "recycling", "bin", "trash", "garbage", "dispose", "disposal",
+            "kabadiwala", "scrap", "compost", "landfill", "sbm", "swachh", "segregat",
+            "resell", "sell", "buyer", "buyback", "exchange", "cashify", "croma", "reliance",
+            "olx", "second hand", "refurbish", "repair", "donate", "donation", "value",
+            "price", "rupees", "cost", "market", "take back", "what to do", "iron", "phone"
+        ]
         if any(ot in q for ot in off_topic) and not any(w in q for w in waste_words):
             return "I am EcoSort-Arm, an AI assistant dedicated exclusively to physical waste segregation, recycling, and circular economy under India's Swachh Bharat Mission (SBM-Urban 2.0). I cannot assist with general topics like programming or trivia. Please ask about a waste item, scrap material, or recycling method!"
 
         # 1. Cloudflare Meta Llama 3.2 Chat (Fast 3B with 11B Vision fallback)
         if self.cf_token and self.cf_account_id:
             import urllib.request, json
-            messages = [
-                {"role": "system", "content": f"You are EcoSort AI Waste Assistant for India's Swachh Bharat Mission (SBM-Urban 2.0). STRICT DOMAIN POLICY: You strictly and exclusively answer questions regarding physical waste segregation, recycling, composting, e-waste handling, kabadiwalas/scrap dealers, and SBM 2.0 norms for '{context_item}'. If the user asks about anything unrelated to waste, recycling, materials, or environmental sustainability (such as coding, programming, running Python, gaming, general conversation, homework, politics), politely REFUSE in 1 concise sentence and guide them back to waste segregation."}
-            ]
+            ctx = context_item.strip() if context_item else "the identified waste item"
+            sys_prompt = (
+                f"You are EcoSort AI, an expert circular economy & waste segregation advisor for India's Swachh Bharat Mission (SBM-Urban 2.0).\n"
+                f"CURRENT ITEM CONTEXT: The user is specifically asking about '{ctx}'.\n"
+                f"All questions like 'what should I do with this?', 'where can I resell this?', 'can I sell this to kabadiwala?', 'is this recyclable?', 'how to dispose it?' refer directly to '{ctx}'.\n"
+                f"You enthusiastically help users with:\n"
+                f"1. Reselling, trade-ins, and brand buybacks (e.g., Cashify, Croma, Reliance Digital, Amazon/Flipkart trade-ins for electronics/appliances; pre-owned platforms).\n"
+                f"2. Selling to local scrap dealers / kabadiwalas and scrap pricing.\n"
+                f"3. Repairing, refurbishing, donating to NGOs, upcycling.\n"
+                f"4. Proper Swachh Bharat bin segregation (Green = Wet/Compost, Blue = Dry Recyclables, Red/Black = Domestic Hazardous/E-Waste) and municipal SBM 2.0 rules.\n"
+                f"5. Environmental and hazard safety.\n"
+                f"RULES:\n"
+                f"- NEVER ask the user what item they are holding or talking about; you already know it is '{ctx}'.\n"
+                f"- Answer directly, practically, and concisely (2-4 clear sentences or bullet points) with Indian context.\n"
+                f"- Only refuse completely unrelated queries that have zero connection to items, materials, waste, recycling, or circular economy (e.g. 'write python code', 'who won the match')."
+            )
+            messages = [{"role": "system", "content": sys_prompt}]
             for h in (conversation_history or [])[-6:]:
-                role = "user" if h.get("sender") == "user" else "assistant"
-                messages.append({"role": role, "content": h.get("text", "")})
-            messages.append({"role": "user", "content": user_question})
+                role = "user" if h.get("sender") == "user" or h.get("role") == "user" else "assistant"
+                content = h.get("text") or h.get("content") or ""
+                if content:
+                    messages.append({"role": role, "content": content})
+            
+            user_msg = user_question
+            if ctx and not user_question.lower().startswith("[regarding"):
+                user_msg = f"[Regarding {ctx}]: {user_question}"
+            messages.append({"role": "user", "content": user_msg})
 
             for m in ["@cf/meta/llama-3.2-3b-instruct", "@cf/meta/llama-3.2-11b-vision-instruct"]:
                 try:
