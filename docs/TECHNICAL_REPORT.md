@@ -11,7 +11,7 @@
 **Target Hardware:** Armv8.2-A / Armv9-A (Raspberry Pi 5 / Arm Linux / Android Smartphones)  
 **Reference Runtime:** ExecuTorch with Arm KleidiAI Micro-kernels & XNNPACK  
 **Repository:** [https://github.com/dtmpriyanshu/Eco-Sort](https://github.com/dtmpriyanshu/Eco-Sort)  
-**Demonstration Video:** *[Watch 2.5-Minute Video Walkthrough (Link to be added)](#)*  
+**Demonstration Video:** [Watch 2.5-Minute Video Walkthrough](https://youtu.be/1h5sOfPfbbE)  
 
 ---
 

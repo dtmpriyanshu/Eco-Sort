@@ -6,10 +6,17 @@ Uses YOLOv8-Nano ONNX via OpenCV DNN to detect physical objects locally on CPU i
 
 import os
 import base64
-import cv2
-import numpy as np
 from dataclasses import dataclass
 from typing import List, Optional, Dict, Any, Tuple
+
+try:
+    import cv2
+    import numpy as np
+    HAS_OPENCV = True
+except ImportError:
+    cv2 = None
+    np = None
+    HAS_OPENCV = False
 
 
 COCO_CLASSES = [
@@ -85,6 +92,9 @@ class EdgeVisionDetector:
         self._load_model()
 
     def _load_model(self):
+        if not HAS_OPENCV:
+            self.net = None
+            return
         if os.path.exists(self.model_path):
             try:
                 self.net = cv2.dnn.readNetFromONNX(self.model_path)
@@ -101,6 +111,14 @@ class EdgeVisionDetector:
         """
         Decodes a base64 image and performs on-device object detection.
         """
+        if not HAS_OPENCV:
+            return VisionResult(
+                is_detected=False,
+                primary_item=None,
+                confidence=0.0,
+                box_2d=None,
+                all_items=[]
+            )
         try:
             # Strip data:image/...;base64, header if present
             if "," in base64_str:

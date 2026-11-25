@@ -17,7 +17,7 @@
 - **Institution:** North-Eastern Hill University (NEHU), Shillong
 - **Faculty Mentor:** [Prof. Subhash C. Arya](https://github.com/aryasubh)
 - **Repository:** [https://github.com/dtmpriyanshu/Eco-Sort](https://github.com/dtmpriyanshu/Eco-Sort)
-- **Demonstration Video:** [https://youtu.be/1h5sOfPfbbE]
+- **Demonstration Video:** [Watch 2.5-Minute Video Walkthrough](https://youtu.be/1h5sOfPfbbE)
 
 ---
 

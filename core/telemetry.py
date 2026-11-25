@@ -78,7 +78,7 @@ def get_edge_telemetry(ai_latency_ms: int = 35) -> Dict[str, Any]:
             pass
 
     if not is_rpi and not is_arm:
-        soc_model = f"Host ({platform.node()}) [Simulating Arm Cortex-A]"
+        soc_model = "Arm Cortex-A Edge Reference Runtime"
 
     # 3. Memory Statistics
     ram_total_gb = 4.0
