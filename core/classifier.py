@@ -207,6 +207,48 @@ class WasteClassifier:
             res.box_2d = box_2d
         return res
 
+    def _determine_accurate_stream(self, detected_name: str, category_id: str = "", bin_name: str = "") -> WasteStream:
+        name_l = detected_name.lower()
+        cat_l = category_id.lower()
+        bin_l = bin_name.lower()
+
+        # 1. Domestic Hazardous & E-Waste (Red / Black Bin)
+        if any(w in name_l or w in cat_l for w in [
+            "phone", "smartphone", "mobile", "charger", "adapter", "plug", "socket",
+            "cable", "wire", "cord", "mouse", "keyboard", "battery", "laptop", "tablet",
+            "electronics", "circuit", "pcb", "headphone", "earphone", "remote",
+            "iron", "clothes iron", "press", "heater", "toaster", "kettle", "microwave",
+            "fan", "mixer", "appliance", "bulb", "lamp", "cfl", "tube", "chemical",
+            "medicine", "sanitary", "hazardous", "e-waste", "e_waste", "toxic"
+        ]):
+            return STREAM_RED
+
+        # 2. Dry Recyclable (Blue Bin) - HIGHEST PRIORITY FOR PACKAGING & DRY ITEMS
+        if any(w in name_l or w in cat_l for w in [
+            "plastic", "bottle", "pet", "wrapper", "packet", "chips", "biscuit", "mlp",
+            "snack", "can", "tin", "aluminum", "metal", "foil", "box", "carton", "cardboard",
+            "paper", "newspaper", "magazine", "book", "cup", "tumbler", "jar", "container",
+            "polybag", "bag", "pouch", "tub", "tray", "textile", "cloth", "fabric", "blanket",
+            "towel", "linen", "curtain", "shoe", "footwear", "umbrella", "glass", "straw",
+            "packaging", "dry_plastic", "metal_cans", "dry_textile", "greasy_paper", "dry"
+        ]):
+            return STREAM_BLUE
+
+        # 3. Wet Organic / Compostable (Green Bin) - ONLY PURE FOOD / PEELS
+        if any(w in name_l or w in cat_l for w in [
+            "peel", "banana", "apple", "fruit", "vegetable", "leftover", "curry", "rice",
+            "dal", "sabzi", "gravy", "cooked food", "kitchen scrap", "food scrap",
+            "tea leave", "coffee ground", "eggshell", "meat", "bone", "salad", "compost",
+            "flower", "leaves", "leaf", "wet_food", "organic", "wet"
+        ]):
+            return STREAM_GREEN
+
+        if "red" in bin_l or "black" in bin_l:
+            return STREAM_RED
+        if "green" in bin_l and not any(w in name_l for w in ["bottle", "wrapper", "plastic", "can", "paper", "box"]):
+            return STREAM_GREEN
+        return STREAM_BLUE
+
     def _analyze_image_cf(self, image_base64: str) -> Optional[WasteAnalysisResult]:
         if not self.cf_token or not self.cf_account_id:
             return None
@@ -214,15 +256,15 @@ class WasteClassifier:
         prompt = """You are EcoSort Multimodal AI, an expert waste-segregation vision engine for India's Swachh Bharat Mission (SBM-Urban 2.0).
 Examine this image and identify the primary physical object or waste material present.
 Classify under Swachh Bharat Mission 2.0 rules:
-- GREEN BIN (wet_food): food leftovers, vegetable/fruit peels, tea leaves, organic waste.
-- RED/BLACK BIN (e_waste / domestic_hazardous): phones, chargers, adapters, mice, electronics, batteries, lamps, medicine, clocks.
-- BLUE BIN (dry_plastic / metal_cans / dry_paper / dry_textile): plastic bottles, wrappers, cans, boxes, paper, cloth.
+- BLUE BIN (dry_plastic / metal_cans / dry_paper / dry_textile): ALL dry recyclables: plastic bottles, wrappers, chips packets, cans, boxes, cardboard, paper, cloth, dry containers.
+- GREEN BIN (wet_food): ONLY wet compostable organic food scraps, vegetable/fruit peels, tea leaves. If an item is a wrapper, bottle, can, or container, it is NEVER Green Bin—it is BLUE BIN!
+- RED/BLACK BIN (e_waste / domestic_hazardous): phones, chargers, adapters, mice, electronics, batteries, appliances.
 
 Respond with ONLY valid JSON:
 {
   "detected_name": "Specific Name of Object",
-  "category_id": "wet_food or dry_plastic or e_waste or metal_cans or greasy_paper or dry_textile",
-  "bin_name": "GREEN BIN — WET / COMPOSTABLE or BLUE BIN — DRY RECYCLABLE or RED / BLACK BIN — DOMESTIC HAZARDOUS",
+  "category_id": "dry_plastic or wet_food or e_waste or metal_cans or greasy_paper or dry_textile",
+  "bin_name": "BLUE BIN — DRY RECYCLABLE or GREEN BIN — WET / COMPOSTABLE or RED / BLACK BIN — DOMESTIC HAZARDOUS",
   "disposal_recommendation": "1-2 practical disposal instruction sentences.",
   "recycling_points": ["Recycling point 1", "Recycling point 2", "Recycling point 3"],
   "action_instructions": ["Action step 1", "Action step 2", "Action step 3", "Action step 4"],
@@ -249,12 +291,25 @@ Respond with ONLY valid JSON:
             )
             with urllib.request.urlopen(req, timeout=28) as resp:
                 data = json.loads(resp.read().decode())
-                content = data.get("result", {}).get("response", "")
-                first_b = content.find("{")
-                last_b = content.rfind("}")
-                if first_b != -1 and last_b > first_b:
-                    json_str = content[first_b:last_b+1]
-                    parsed = json.loads(json_str)
+                res_obj = data.get("result", {})
+                if isinstance(res_obj, dict):
+                    content = res_obj.get("response", res_obj)
+                else:
+                    content = res_obj
+
+                parsed = None
+                if isinstance(content, dict):
+                    parsed = content
+                elif isinstance(content, str):
+                    first_b = content.find("{")
+                    last_b = content.rfind("}")
+                    if first_b != -1 and last_b > first_b:
+                        try:
+                            parsed = json.loads(content[first_b:last_b+1])
+                        except Exception:
+                            parsed = None
+
+                if parsed and isinstance(parsed, dict):
                     items = parsed.get("detected_items", [])
                     item = items[0] if items else parsed
                     detected_name = item.get("detected_name", "").strip()
@@ -276,14 +331,7 @@ Respond with ONLY valid JSON:
                             box_2d=None
                         )
 
-                    cat = item.get("category_id", "").lower()
-                    bin_str = item.get("bin_name", "").lower()
-                    if "green" in bin_str or cat in ["wet_food", "organic", "wet"]:
-                        stream = STREAM_GREEN
-                    elif "red" in bin_str or "black" in bin_str or cat in ["e_waste", "domestic_hazardous", "hazardous"]:
-                        stream = STREAM_RED
-                    else:
-                        stream = STREAM_BLUE
+                    stream = self._determine_accurate_stream(detected_name, item.get("category_id", ""), item.get("bin_name", ""))
 
                     pts = item.get("recycling_points", [])
                     if isinstance(pts, str):
@@ -306,7 +354,7 @@ Respond with ONLY valid JSON:
                         latency_ms=45,
                         box_2d=item.get("box_2d")
                     )
-                elif content.strip():
+                elif isinstance(content, str) and content.strip():
                     clean_text = content.strip()
                     explicit_empty = ["blank wall", "no object in the image", "no physical object detected", "cannot see any object", "nothing in the frame"]
                     if any(p in clean_text.lower() for p in explicit_empty):
@@ -394,13 +442,7 @@ Respond with ONLY valid JSON:
         bin_m = re.search(r'\*\*Bin Name:\*\*\s*([^\n\r*]+)', raw, re.IGNORECASE)
         bin_str = (bin_m.group(1).strip() if bin_m else "").lower()
 
-        raw_lower = raw.lower()
-        if "green" in bin_str or any(w in raw_lower for w in ["wet_food", "compost", "fruit", "vegetable", "kitchen scrap", "food leftover"]):
-            stream = STREAM_GREEN
-        elif "red" in bin_str or "black" in bin_str or any(w in raw_lower for w in ["e_waste", "e-waste", "hazardous", "iron", "electronics", "battery", "charger", "appliance", "phone"]):
-            stream = STREAM_RED
-        else:
-            stream = STREAM_BLUE
+        stream = self._determine_accurate_stream(detected_name, "", bin_str)
 
         if not disposal:
             disposal = f"Deposit {detected_name} into the {stream.bin_name}. {stream.disposal_rule}"
@@ -462,9 +504,9 @@ Respond with ONLY valid JSON:
     {
       "detected_name": "Specific Name of Object",
       "box_2d": [ymin, xmin, ymax, xmax],
-      "category_id": "wet_food",
-      "bin_name": "GREEN BIN — WET / COMPOSTABLE",
-      "bin_color_hex": "0xFF16A34A",
+      "category_id": "dry_plastic",
+      "bin_name": "BLUE BIN — DRY RECYCLABLE",
+      "bin_color_hex": "0xFF2563EB",
       "disposal_recommendation": "1-2 practical disposal instruction sentences.",
       "recycling_points": ["Material Structure: ...", "Processing Pathway: ...", "Hazard/Resource Note: ...", "Swachh Bharat Norms: ..."],
       "action_instructions": ["Step 1...", "Step 2...", "Step 3...", "Step 4..."],
@@ -522,13 +564,7 @@ Respond with ONLY valid JSON:
                         box_2d=None
                     )
                 item = items[0]
-                cat = item.get("category_id", "")
-                if cat == "wet_food":
-                    stream = STREAM_GREEN
-                elif cat == "e_waste":
-                    stream = STREAM_RED
-                else:
-                    stream = STREAM_BLUE
+                stream = self._determine_accurate_stream(item.get("detected_name", ""), item.get("category_id", ""), item.get("bin_name", ""))
 
                 return WasteAnalysisResult(
                     is_waste_eligible=True,
@@ -673,9 +709,16 @@ Respond with ONLY valid JSON:
                 latency_ms=17
             )
 
-        # --- 2. WET ORGANIC & COMPOSTABLE (GREEN BIN) ---
-        if any(w in q for w in ["peel", "banana", "apple", "fruit", "vegetable", "food", "tea", "coffee", "roti", "rice", "dal", "bread", "organic", "leaf", "leaves", "flower", "eggshell", "bone", "meat", "coconut shell", "curry", "cooked", "leftover", "leftovers", "plate", "meal", "sabzi", "gravy", "dish", "produce", "broccoli", "carrot", "orange", "sandwich", "snack", "salad", "pizza"]):
-            if any(w in q for w in ["rice", "dal", "roti", "curry", "sabzi", "leftover", "leftovers", "cooked", "plate", "meal", "dish"]):
+        # Packaging Guard: wrappers, bottles, cans, boxes, packets, plastics MUST route to Blue Bin!
+        has_packaging = any(w in q for w in [
+            "wrapper", "packet", "pouch", "bag", "bottle", "can", "tin", "box",
+            "carton", "container", "plastic", "paper", "cup", "foil", "tub", "tray",
+            "snack", "biscuit", "chips", "packaging"
+        ])
+
+        # --- 2. WET ORGANIC & COMPOSTABLE (GREEN BIN) - ONLY PURE FOOD WITHOUT PACKAGING ---
+        if not has_packaging and any(w in q for w in ["peel", "banana", "apple", "fruit", "vegetable", "tea", "coffee", "roti", "rice", "dal", "bread", "organic", "leaf", "leaves", "flower", "eggshell", "bone", "meat", "coconut shell", "curry", "cooked", "leftover", "leftovers", "sabzi", "gravy", "produce", "broccoli", "carrot", "orange", "salad"]):
+            if any(w in q for w in ["rice", "dal", "roti", "curry", "sabzi", "leftover", "leftovers", "cooked"]):
                 name = "Cooked Food Scraps & Kitchen Leftovers"
             elif any(w in q for w in ["peel", "banana", "apple", "fruit", "orange"]):
                 name = "Fruit Peels & Fruit Waste"

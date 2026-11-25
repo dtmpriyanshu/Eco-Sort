@@ -350,16 +350,16 @@ object WasteDataProvider {
 You are EcoSort AI, an expert waste-segregation vision engine for India's Swachh Bharat Mission (SBM-Urban 2.0).
 Examine this image and identify the primary physical object or waste material present.
 Classify under Swachh Bharat Mission 2.0 rules:
-- GREEN BIN (wet_food): food leftovers, vegetable/fruit peels, tea leaves, organic waste.
-- RED/BLACK BIN (e_waste / domestic_hazardous): phones, chargers, adapters, mice, electronics, batteries, lamps, medicine, clocks.
-- BLUE BIN (dry_plastic / metal_cans / dry_paper / dry_textile): plastic bottles, wrappers, cans, boxes, paper, cloth.
+- BLUE BIN (0xFF2563EB): ALL dry recyclables: plastic bottles, wrappers, chips packets, biscuit wrappers, cans, boxes, cardboard, paper, cloth, dry containers. If an item is a wrapper, bottle, can, or container, it is ALWAYS BLUE BIN!
+- GREEN BIN (0xFF16A34A): ONLY wet compostable organic food scraps, fruit/vegetable peels, leftovers. Never put packaging, wrappers, or plastics in the Green Bin.
+- RED/BLACK BIN (0xFFDC2626): E-waste, phones, chargers, adapters, mice, electronics, batteries, appliances.
 
 Respond with ONLY valid JSON:
 {
   "detected_name": "Specific Name of Object",
-  "category_id": "wet_food", // wet_food, e_waste, dry_plastic, metal_cans, dry_textile, greasy_paper
-  "bin_name": "GREEN BIN — WET / COMPOSTABLE", // or BLUE BIN — DRY RECYCLABLE or RED / BLACK BIN — DOMESTIC HAZARDOUS
-  "bin_color_hex": "0xFF16A34A",
+  "category_id": "dry_plastic", // CHOOSE ONE: dry_plastic, metal_cans, dry_textile, e_waste, wet_food, greasy_paper, composite_dry
+  "bin_name": "BLUE BIN — DRY RECYCLABLE", // or GREEN BIN — WET / COMPOSTABLE or RED / BLACK BIN — DOMESTIC HAZARDOUS
+  "bin_color_hex": "0xFF2563EB", // 0xFF2563EB for Blue, 0xFF16A34A for Green, 0xFFDC2626 for Red
   "disposal_recommendation": "1-2 practical disposal instruction sentences.",
   "recycling_points": [
     "Material Structure: ...",
@@ -673,15 +673,85 @@ Respond with ONLY a raw JSON object (no markdown, no backticks):
         return@withContext classifyItemOffline(userQuery)
     }
 
-    fun parseSingleItemJson(parsed: JSONObject): DetectedItem {
-        val binColor = parsed.optString("bin_color", "").lowercase()
-        val catId = parsed.optString("category_id", "")
-        val matchingBase = when {
-            catId.isNotBlank() -> baseCategories.find { it.id == catId } ?: baseCategories[0]
-            binColor == "red" -> baseCategories[5] // Hazardous/E-waste
-            binColor == "green" -> baseCategories[2] // Wet/Organic
-            else -> baseCategories[0] // Dry
+    /**
+     * SBM 2.0 Physical Waste Truth Routing:
+     * Enforces correct municipal stream assignment (Blue, Green, Red) based on actual physical
+     * object properties, overriding LLM template hallucinations or mistaken color strings.
+     */
+    fun determineAccurateBin(
+        detectedName: String,
+        rawCatId: String = "",
+        rawBinName: String = "",
+        rawColorHex: Long = 0L
+    ): Triple<WasteCategory, String, Long> {
+        val nameLower = detectedName.lowercase()
+        val catLower = rawCatId.lowercase()
+        val binLower = rawBinName.lowercase()
+
+        // 1. DOMESTIC HAZARDOUS & E-WASTE (RED / BLACK BIN)
+        val isHazardous = listOf(
+            "phone", "smartphone", "mobile", "charger", "adapter", "plug", "socket",
+            "cable", "wire", "cord", "mouse", "keyboard", "battery", "laptop", "tablet",
+            "electronics", "circuit", "pcb", "headphone", "earphone", "remote",
+            "iron", "clothes iron", "press", "heater", "toaster", "kettle", "microwave",
+            "fan", "mixer", "appliance", "bulb", "lamp", "cfl", "tube", "chemical",
+            "medicine", "sanitary", "hazardous", "e-waste", "e_waste", "toxic"
+        ).any { nameLower.contains(it) || catLower.contains(it) }
+
+        if (isHazardous) {
+            return Triple(baseCategories[5], "RED / BLACK BIN — DOMESTIC HAZARDOUS", 0xFFDC2626)
         }
+
+        // 2. DRY RECYCLABLE (BLUE BIN) - HIGHEST PRIORITY FOR PACKAGING, PLASTICS, METALS, PAPER
+        val isDry = listOf(
+            "plastic", "bottle", "pet", "wrapper", "packet", "chips", "biscuit", "mlp",
+            "snack", "can", "tin", "aluminum", "metal", "foil", "box", "carton", "cardboard",
+            "paper", "newspaper", "magazine", "book", "cup", "tumbler", "jar", "container",
+            "polybag", "bag", "pouch", "tub", "tray", "textile", "cloth", "fabric", "blanket",
+            "towel", "linen", "curtain", "shoe", "footwear", "umbrella", "glass", "straw",
+            "packaging", "dry_plastic", "metal_cans", "dry_textile", "greasy_paper", "dry"
+        ).any { nameLower.contains(it) || catLower.contains(it) }
+
+        if (isDry) {
+            val base = when {
+                nameLower.contains("can") || nameLower.contains("tin") || nameLower.contains("metal") || nameLower.contains("aluminum") -> baseCategories[4]
+                nameLower.contains("cloth") || nameLower.contains("textile") || nameLower.contains("blanket") || nameLower.contains("fabric") -> baseCategories[1]
+                else -> baseCategories[0] // dry_plastic
+            }
+            return Triple(base, "BLUE BIN — DRY RECYCLABLE", 0xFF2563EB)
+        }
+
+        // 3. WET ORGANIC / COMPOSTABLE (GREEN BIN) - ONLY PURE BIODEGRADABLE FOOD / PEELS
+        val isWetOrganic = listOf(
+            "peel", "banana", "apple", "fruit", "vegetable", "leftover", "curry", "rice",
+            "dal", "sabzi", "gravy", "cooked food", "kitchen scrap", "food scrap",
+            "tea leave", "coffee ground", "eggshell", "meat", "bone", "salad", "compost",
+            "flower", "leaves", "leaf", "wet_food", "organic", "wet"
+        ).any { nameLower.contains(it) || catLower.contains(it) }
+
+        if (isWetOrganic) {
+            return Triple(baseCategories[2], "GREEN BIN — WET / COMPOSTABLE", 0xFF16A34A)
+        }
+
+        // 4. Fallback based on bin string
+        return when {
+            binLower.contains("red") || binLower.contains("black") -> Triple(baseCategories[5], "RED / BLACK BIN — DOMESTIC HAZARDOUS", 0xFFDC2626)
+            binLower.contains("green") && !listOf("bottle", "wrapper", "plastic", "can", "paper", "box").any { nameLower.contains(it) } -> Triple(baseCategories[2], "GREEN BIN — WET / COMPOSTABLE", 0xFF16A34A)
+            else -> Triple(baseCategories[0], "BLUE BIN — DRY RECYCLABLE", 0xFF2563EB)
+        }
+    }
+
+    fun parseSingleItemJson(parsed: JSONObject): DetectedItem {
+        val detectedName = parsed.optString("detected_name", "Identified Waste")
+        val catId = parsed.optString("category_id", "")
+        val rawBinName = parsed.optString("bin_name", parsed.optString("target_bin", ""))
+        val rawHex = try {
+            val hexStr = parsed.optString("bin_color_hex", "").removePrefix("0x").removePrefix("#")
+            if (hexStr.isNotBlank()) hexStr.toLong(16) else 0L
+        } catch (e: Exception) { 0L }
+
+        // Accurately determine the target bin and category based on physical truth
+        val (matchingBase, targetBin, colorHex) = determineAccurateBin(detectedName, catId, rawBinName, rawHex)
 
         val pointsJson = parsed.optJSONArray("recycling_points")
         val points = mutableListOf<String>()
@@ -699,26 +769,9 @@ Respond with ONLY a raw JSON object (no markdown, no backticks):
             steps.addAll(matchingBase.sustainablePractices)
         }
 
-        val colorHex = when {
-            binColor == "red" -> 0xFFDC2626
-            binColor == "green" -> 0xFF16A34A
-            binColor == "blue" -> 0xFF2563EB
-            parsed.has("bin_color_hex") -> {
-                try {
-                    val hexStr = parsed.optString("bin_color_hex", "0xFF2563EB").removePrefix("0x").removePrefix("#")
-                    hexStr.toLong(16)
-                } catch (e: Exception) {
-                    matchingBase.binColorHex
-                }
-            }
-            else -> matchingBase.binColorHex
-        }
-
-        val targetBin = parsed.optString("bin_name", parsed.optString("target_bin", matchingBase.binName))
         val disposal = parsed.optString("disposal_recommendation", matchingBase.disposalRecommendation)
         val co2 = parsed.optDouble("co2_grams", parsed.optDouble("avoided_co2_grams", matchingBase.co2Grams.toDouble())).toFloat()
         val energy = parsed.optInt("energy_percent", parsed.optInt("energy_saved_percent", matchingBase.energySavedPercent))
-        val detectedName = parsed.optString("detected_name", "Identified Waste")
         val impact = parsed.optString("environmental_impact", matchingBase.environmentalImpact)
 
         val boxArray = parsed.optJSONArray("box_2d") ?: parsed.optJSONArray("bounding_box")
@@ -911,15 +964,12 @@ Respond with ONLY a raw JSON object (no markdown, no backticks):
         val binMatch = Regex("""\*\*Bin Name:\*\*\s*([^\n\r*]+)""", RegexOption.IGNORE_CASE).find(raw)
         val binStr = (binMatch?.groupValues?.get(1)?.trim() ?: "").lowercase()
 
-        val rawLower = raw.lowercase()
-        val baseCat = when {
-            binStr.contains("green") || listOf("wet_food", "compost", "fruit", "vegetable", "kitchen scrap", "food leftover").any { rawLower.contains(it) } -> baseCategories[2]
-            binStr.contains("red") || binStr.contains("black") || listOf("e_waste", "e-waste", "hazardous", "iron", "electronics", "battery", "charger", "appliance", "phone").any { rawLower.contains(it) } -> baseCategories[5]
-            else -> baseCategories[0]
-        }
+        val (baseCat, accurateBinName, accurateBinColor) = determineAccurateBin(detectedName, "", binStr, 0L)
 
         val customCategory = baseCat.copy(
-            disposalRecommendation = if (disposal.isNotBlank() && disposal.length > 10) disposal else "Deposit $detectedName into the ${baseCat.binName}. ${baseCat.disposalRecommendation}"
+            binName = accurateBinName,
+            binColorHex = accurateBinColor,
+            disposalRecommendation = if (disposal.isNotBlank() && disposal.length > 10) disposal else "Deposit $detectedName into the $accurateBinName. ${baseCat.disposalRecommendation}"
         )
 
         val bulletLines = raw.lines().filter { line ->
@@ -1187,7 +1237,7 @@ RULES:
             "electrical", "appliance", "remote", "audio", "headphone", "earphone",
             "bulb", "lamp", "lighting", "screen", "display", "monitor", "laptop",
             "computer", "peripheral", "transistor", "capacitor", "component", "device",
-            "usb", "storage", "drive", "flash", "wiring", "extension", "outlet"
+            "usb", "storage", "drive", "flash", "wiring", "extension", "outlet", "iron"
         )
         val matchedHazardous = labels.firstOrNull { l -> hazardousKeywords.any { l.first.lowercase().contains(it) } }
         if (matchedHazardous != null) {
@@ -1199,6 +1249,7 @@ RULES:
                 labelLower.contains("mouse") -> "Computer Mouse"
                 labelLower.contains("keyboard") -> "Computer Keyboard"
                 labelLower.contains("battery") -> "Battery Cell (Hazardous)"
+                labelLower.contains("iron") -> "Electric Clothes Iron"
                 labelLower.contains("headphone") || labelLower.contains("earphone") || labelLower.contains("audio") -> "Headphones / Earphones"
                 labelLower.contains("remote") -> "Remote Control"
                 labelLower.contains("bulb") || labelLower.contains("lamp") || labelLower.contains("lighting") -> "CFL / Bulb (Hazardous)"
@@ -1208,11 +1259,35 @@ RULES:
             return classifyItemOffline(itemName)
         }
 
-        // 2. Check for Wet Organic / Food Scrap (Green Bin)
+        // 2. Check for Dry Recyclables, Plastics, Packaging, Cans, Paper, Textiles (Blue Bin)
+        // Highest priority for packaging materials so snack wrappers, bottles on tables, etc. are never misidentified as wet food
+        val dryKeywords = listOf(
+            "bottle", "water bottle", "plastic bottle", "cup", "drinkware", "paper", "cardboard",
+            "box", "carton", "can", "tin", "aluminum", "textile", "cloth", "fabric", "wrapper",
+            "snack", "packet", "packaging", "bag", "pouch", "plastic", "container", "jar", "glass",
+            "shoe", "umbrella", "foil"
+        )
+        val matchedDry = labels.firstOrNull { l -> dryKeywords.any { l.first.lowercase().contains(it) } }
+        if (matchedDry != null) {
+            val labelLower = matchedDry.first.lowercase()
+            val itemName = when {
+                labelLower.contains("bottle") -> "Plastic Water Bottle"
+                labelLower.contains("wrapper") || labelLower.contains("snack") || labelLower.contains("packet") -> "Snack Wrapper (MLP)"
+                labelLower.contains("can") || labelLower.contains("tin") || labelLower.contains("aluminum") -> "Metal Beverage Can"
+                labelLower.contains("box") || labelLower.contains("cardboard") || labelLower.contains("carton") -> "Cardboard Packaging"
+                labelLower.contains("cup") || labelLower.contains("drinkware") -> "Paper / Plastic Cup"
+                labelLower.contains("cloth") || labelLower.contains("fabric") || labelLower.contains("textile") -> "Fabric / Textile Scrap"
+                labelLower.contains("bag") || labelLower.contains("pouch") || labelLower.contains("plastic") -> "Plastic Packaging / Bag"
+                else -> "Dry Recyclable Packaging"
+            }
+            return classifyItemOffline(itemName)
+        }
+
+        // 3. Check for Wet Organic / Food Scrap (Green Bin) - ONLY pure food/peels
         val organicKeywords = listOf(
-            "food", "dish", "cuisine", "meal", "rice", "vegetable", "fruit",
-            "produce", "ingredient", "bread", "curry", "salad", "tableware",
-            "plate", "recipe", "plant", "flower", "banana", "apple", "snack"
+            "banana", "peel", "apple", "fruit", "vegetable", "produce", "ingredient",
+            "bread", "rice", "curry", "sabzi", "dal", "cooked", "leftover", "meat",
+            "salad", "plant", "flower", "leaf"
         )
         val matchedOrganic = labels.firstOrNull { l -> organicKeywords.any { l.first.lowercase().contains(it) } }
         if (matchedOrganic != null) {
@@ -1222,26 +1297,8 @@ RULES:
                 labelLower.contains("apple") -> "Apple Core"
                 labelLower.contains("fruit") -> "Fruit Scrap / Peel"
                 labelLower.contains("vegetable") -> "Vegetable Scrap"
-                labelLower.contains("rice") || labelLower.contains("dish") || labelLower.contains("plate") || labelLower.contains("curry") || labelLower.contains("meal") || labelLower.contains("food") -> "Cooked Food Leftovers / Kitchen Scrap"
+                labelLower.contains("rice") || labelLower.contains("curry") || labelLower.contains("dal") || labelLower.contains("cooked") || labelLower.contains("leftover") -> "Cooked Food Leftovers / Kitchen Scrap"
                 else -> "Kitchen Food Scrap / Organic Waste"
-            }
-            return classifyItemOffline(itemName)
-        }
-
-        // 3. Check for Dry Recyclables (Blue Bin)
-        val dryKeywords = listOf(
-            "bottle", "water bottle", "cup", "drinkware", "paper", "cardboard", "box", "carton", "can", "tin", "aluminum", "textile", "cloth", "wrapper", "packaging", "bag"
-        )
-        val matchedDry = labels.firstOrNull { l -> dryKeywords.any { l.first.lowercase().contains(it) } }
-        if (matchedDry != null) {
-            val labelLower = matchedDry.first.lowercase()
-            val itemName = when {
-                labelLower.contains("bottle") -> "Plastic Water Bottle"
-                labelLower.contains("cup") -> "Paper / Plastic Cup"
-                labelLower.contains("box") || labelLower.contains("cardboard") -> "Cardboard Packaging"
-                labelLower.contains("can") || labelLower.contains("tin") -> "Metal Beverage Can"
-                labelLower.contains("wrapper") -> "Snack Wrapper (MLP)"
-                else -> "Dry Recyclable Packaging"
             }
             return classifyItemOffline(itemName)
         }
@@ -1462,8 +1519,16 @@ RULES:
             return DynamicAdvisoryResult(customCategory, detectedName, points, steps, impact, modelSource = "Meta Llama 3.2 (ExecuTorch Arm)", detectedItems = listOf(detItem))
         }
 
-        // 8. COOKED FOOD SCRAPS, RICE, CURRY & KITCHEN LEFTOVERS (GREEN BIN)
-        if (listOf("rice", "curry", "sabzi", "dal", "gravy", "dish", "leftover", "leftovers", "plate", "cooked", "meal", "food", "kitchen scrap").any { q.contains(it) }) {
+        // Packaging & Container Guard:
+        // Any dry packaging (wrapper, bottle, can, box, cup, packet, container, plastic) MUST route to Blue Bin!
+        val isDryPackaging = listOf(
+            "wrapper", "packet", "pouch", "bag", "bottle", "can", "tin", "box",
+            "carton", "container", "plastic", "paper", "cup", "foil", "tub", "tray",
+            "snack", "biscuit", "chips", "packaging"
+        ).any { q.contains(it) }
+
+        // 8. COOKED FOOD SCRAPS, RICE, CURRY & KITCHEN LEFTOVERS (GREEN BIN) - ONLY PURE FOOD WITHOUT PACKAGING
+        if (!isDryPackaging && listOf("rice", "curry", "sabzi", "dal", "gravy", "leftover", "leftovers", "cooked", "meal", "kitchen scrap").any { q.contains(it) }) {
             val detectedName = "Cooked Food Scraps & Kitchen Leftovers"
             val customCategory = baseCategories[2].copy(
                 categoryName = "Wet Organic Compostable: $detectedName",
@@ -1489,7 +1554,7 @@ RULES:
         }
 
         // 9. FRUIT PEELS, VEGETABLE SCRAPS & ORGANIC GARDEN WASTE (GREEN BIN)
-        if (listOf("peel", "banana", "apple", "fruit", "vegetable", "tea", "coffee", "roti", "bread", "organic", "leaf", "leaves", "produce", "salad", "broccoli", "carrot", "orange").any { q.contains(it) }) {
+        if (!isDryPackaging && listOf("peel", "banana", "apple", "fruit", "vegetable", "tea", "coffee", "roti", "bread", "organic", "leaf", "leaves", "produce", "salad", "broccoli", "carrot", "orange").any { q.contains(it) }) {
             val detectedName = if (q.contains("banana")) "Banana Peel" else if (q.contains("apple")) "Apple Core" else if (q.contains("peel")) "Fruit Peels" else name
             val customCategory = baseCategories[2].copy(
                 categoryName = "Wet Organic Compostable: $detectedName",
@@ -1514,9 +1579,9 @@ RULES:
             return DynamicAdvisoryResult(customCategory, detectedName, points, steps, impact, modelSource = "Meta Llama 3.2 (ExecuTorch Arm)", detectedItems = listOf(detItem))
         }
 
-        // 10. PLASTIC BOTTLES (BLUE BIN)
-        if (listOf("bottle", "pet", "water bottle", "beverage bottle").any { q.contains(it) }) {
-            val detectedName = "Plastic Water Bottle (PET 1)"
+        // 10. PLASTIC BOTTLES & CONTAINERS (BLUE BIN)
+        if (listOf("bottle", "pet", "water bottle", "beverage bottle", "container", "jar", "tub", "tray", "cup").any { q.contains(it) }) {
+            val detectedName = if (q.contains("bottle")) "Plastic Water Bottle (PET 1)" else if (q.contains("cup")) "Plastic / Paper Cup" else name
             val customCategory = baseCategories[0].copy(
                 categoryName = "Dry Recyclable: $detectedName",
                 binName = "BLUE BIN — DRY RECYCLABLE",
@@ -1541,8 +1606,8 @@ RULES:
         }
 
         // 11. SNACK WRAPPERS & MULTI-LAYERED PLASTICS (BLUE BIN)
-        if (listOf("wrapper", "packet", "chips", "biscuit", "mlp", "snack").any { q.contains(it) }) {
-            val detectedName = "Multi-Layered Plastic (MLP) Wrapper"
+        if (listOf("wrapper", "packet", "chips", "biscuit", "mlp", "snack", "pouch", "bag", "plastic").any { q.contains(it) }) {
+            val detectedName = if (q.contains("wrapper") || q.contains("snack") || q.contains("chips") || q.contains("biscuit")) "Multi-Layered Plastic (MLP) Wrapper" else "Plastic Packaging / Bag"
             val customCategory = baseCategories[0].copy(
                 categoryName = "Dry Recyclable: $detectedName",
                 binName = "BLUE BIN — DRY RECYCLABLE",
